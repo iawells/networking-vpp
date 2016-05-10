@@ -113,7 +113,8 @@ class VPPMechanismDriver(api.MechanismDriver):
         """
 
         # TODO(ijw): naive - doesn't check host, or configured
-        # physnets on the host
+        # physnets on the host.  Should work out if the binding
+	# can't be achieved before accepting it
 
         network_type = segment[api.NETWORK_TYPE]
         if network_type not in self.allowed_network_types:
@@ -195,7 +196,10 @@ class VPPMechanismDriver(api.MechanismDriver):
 
 class AgentCommunicator(object):
     def __init__(self):
-        self.agents = CONF.vpp.agents.split(';')
+	if cfg.CONF.ml2_vpp.agents is None:
+	    LOG.error('ml2_vpp needs agents configured right now')
+
+        self.agents = cfg.CONF.ml2_vpp.agents.split(';')
 
     def bind(self, msg):
         """Queue up a bind message for sending.
@@ -213,6 +217,7 @@ class AgentCommunicator(object):
         # to broadcast this, but right now this saves us config work.
         # In a small cloud with not too many ports the workload on the
         # agents is not onerous.
+	LOG.debug('broadcasting message %(msg)s' % {msg: str(msg)})
         for url in self.agents:
             requests.put(url, msg)
 
