@@ -206,64 +206,11 @@ class Port(Resource):
 	else:
 	    return 'Invalid operation on port', 404
 
-# Backend endpoints
-
-backend_parser = reqparse.RequestParser()
-backend_parser.add_argument('name')
-backend_parser.add_argument('service_type')
-backend_parser.add_argument('url')
-
-# This object is an ID-indexed dict containing all the backends that
-# have registered.
-backends = {}
-
-def abort_if_backend_doesnt_exist(name):
-    if name is None:
-        abort(404, message="Backend must be given")
-    if name not in backends:
-        abort(404, message="Backend {} doesn't exist".format(name))
-
-# Backend
-# shows a single backend item and lets you delete a backend item
-class Backend(Resource):
-    def get(self, name):
-        abort_if_backend_doesnt_exist(name)
-        return backends[name]
-
-    def delete(self, name):
-        abort_if_backend_doesnt_exist(name)
-        del backends[name]
-        return '', 204
-
-
-# BackendList
-# shows a list of all backends, and lets you POST to add new tasks
-class BackendList(Resource):
-    def get(self):
-        return backends
-
-    def post(self):
-        args = backend_parser.parse_args()
-	
-        backends[args['name']] = args
-	return args, 201
-
 ##
 ## Actually setup the Api resource routing here
 ##
-api.add_resource(PortList, 
-		 '/backends/<backend>/ports', 
-		 '/services/<service>/ports', 
-		 '/services/<service>/devices/<device>/ports', 
-		 '/ports')
-api.add_resource(Port, 
-		 '/backends/<backend>/ports/<id>',
-		 '/services/<service>/ports/<id>', 
-		 '/ports/<id>')
-api.add_resource(PortBind, '/ports/<id>/<op>')
+api.add_resource(Port, '/ports/<id>/<op>')
 
-api.add_resource(BackendList, '/backends')
-api.add_resource(Backend, '/backends/<name>')
 
 
 # TODO port should probably be configurable.

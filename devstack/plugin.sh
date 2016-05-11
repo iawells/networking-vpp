@@ -56,7 +56,12 @@ function init_vpp_cp {
 }
 
 function configure_vpp_cp {
-    :
+    cat >/etc/neutron/plugins/ml2/ml2_conf_vpp.ini
+[ml2_vpp]
+
+agents=$MECH_VPP_AGENTLIST
+EOF
+
 }
 
 function shut_vpp_cp_down {
