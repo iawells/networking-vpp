@@ -1,4 +1,4 @@
-enable_service vpp-cp
+enable_service vpp-agent
 
 
 MECH_VPP_DIR="$DEST/networking-vpp"

@@ -31,7 +31,7 @@ function init_vpp {
 }
 
 function configure_vpp {
-    :
+    iniset /$Q_PLUGIN_CONF_FILE ml2_vpp agents $MECH_VPP_AGENTLIST
 }
 
 function shut_vpp_down {
@@ -52,16 +52,13 @@ function install_vpp_agent {
 }
 
 function init_vpp_agent {
-    run_process $agent_service_name "$VPP_CP_BINARY"
+    # sudo for now, as it needs to connect to VPP and for that requires root privs
+    # to share its shmem comms channel
+    run_process sudo $agent_service_name "$VPP_CP_BINARY"
 }
 
 function configure_vpp_agent {
-    cat >/etc/neutron/plugins/ml2/ml2_conf_vpp.ini
-[ml2_vpp]
-
-agents=$MECH_VPP_AGENTLIST
-EOF
-
+    :
 }
 
 function shut_vpp_agent_down {

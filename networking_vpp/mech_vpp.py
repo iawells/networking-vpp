@@ -190,7 +190,7 @@ class VPPMechanismDriver(api.MechanismDriver):
         if prev_bind is not None and prev_bind.BOUND_DRIVER == self:
             if current_bind is None or current_bind.BOUND_DRIVER != self:
                 # If we were the last binder of this port but are no longer
-                self.communicator.queue_unbind(context.current()
+                self.communicator.queue_unbind(context.current(),
                                                context.original_host())
 
 
