@@ -190,8 +190,8 @@ class VPPMechanismDriver(api.MechanismDriver):
         if prev_bind is not None and prev_bind.BOUND_DRIVER == self:
             if current_bind is None or current_bind.BOUND_DRIVER != self:
                 # If we were the last binder of this port but are no longer
-                self.communicator.send_unbind(context.id,
-                                              context.original_host())
+                self.communicator.queue_unbind(context.current()
+                                               context.original_host())
 
 
 class AgentCommunicator(object):
@@ -201,7 +201,7 @@ class AgentCommunicator(object):
 
         self.agents = cfg.CONF.ml2_vpp.agents.split(';')
 
-    def bind(self, msg):
+    def bind(self, port):
         """Queue up a bind message for sending.
 
         This is called in the sequence of a REST call and should take
@@ -211,7 +211,24 @@ class AgentCommunicator(object):
 
         self.send_bind(msg)
 
-    def _broadcast_msg(self, msg):
+    def unbind(self, port, host):
+        """Queue up an unbind message for sending.
+
+        This is called in the sequence of a REST call and should take
+        as little time as possible.
+        """
+        # TODO(ijw): should queue the unbind, not send it
+        self.send_unbind(port, host)
+
+    def send_bind(self, port):
+	port_json = json.dumps(port)
+        self._broadcast_msg('ports/%s/bind' % port['id'], port_json)
+
+    def send_unbind(self, port, host):
+	port_json = json.dumps(port)
+        self._broadcast_msg('ports/%s/unbind/%s' % (port['id'], host), port_json)
+
+    def _broadcast_msg(self, urlfrag, msg):
         # TODO(ijw): since we pretty much always know the host to which the
         # port is being bound or unbound, there's absolutely no reason
         # to broadcast this, but right now this saves us config work.
@@ -219,31 +236,4 @@ class AgentCommunicator(object):
         # agents is not onerous.
 	LOG.debug('broadcasting message %(msg)s' % {msg: str(msg)})
         for url in self.agents:
-            requests.put(url, msg)
-
-    def send_bind(self, port_id, bind_type, host):
-        msg = {
-            'uuid': port_id,
-            'bind_type': bind_type,
-            'host': host,
-            'bound': True
-        }
-
-        self._broadcast_msg(msg)
-
-    def unbind(self, port_id, host):
-        """Queue up an unbind message for sending.
-
-        This is called in the sequence of a REST call and should take
-        as little time as possible.
-        """
-        # TODO(ijw): should queue the unbind, not send it
-        self.send_unbind(port_id, host)
-
-    def send_unbind(self, port_id, host):
-        msg = {
-            'uuid': port_id,
-            'bound': False
-        }
-
-        self.broadcast_msg(msg)
+            requests.put(url + urlfrag, msg)

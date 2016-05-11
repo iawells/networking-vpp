@@ -47,61 +47,6 @@ api = Api(app)
 
 ######################################################################
 
-port_parser = reqparse.RequestParser()
-port_parser.add_argument('id')
-
-def abort_if_port_doesnt_exist(id, backend=None):
-    if id not in ports:
-        abort(404, message="Port {} doesn't exist".format(id))
-    if backend is not None and ports[id]['backend'] != backend:
-        abort(404, message="Port {} doesn't exist".format(id))
-
-def do_backend_bind(backend, port_id, device_owner, zone, device_id,
-                    host, binding_profile):
-    """Helper function to get a port bound by the backend.
-
-    Once bound, the port is owned by the network service and cannot be
-    rebound by that service or any other without unbinding first.
-
-    Binding consists of the compute and network services agreeing a
-    drop point; the compute service has previously set binding
-    requirements on the port, and at this point says where the port
-    must be bound (the host); the network service will work out what
-    it can achieve and set information on the port indicating the drop
-    point it has chosen.
-
-    Typically there is some prior knowledge on both sides of what
-    binding types will be acceptable, so this process could be
-    improved.
-    """
-
-    logger.debug('Binding port %s on backend %s: compute: %s/%s/%s location %s' 
-                 % (port_id, backend['name'], device_owner, 
-                    zone, device_id, host))
-    driver = backend_manager.get_backend_driver(backend)
-    # TODO these are not thoroughly documented or validated and are a
-    # part of the API.  Write down what the values must be, must mean
-    # and how the backend can use them.
-    driver.bind(port_id, 
-	device_owner, zone, device_id,
-	host, binding_profile)
-
-    # TODO required?  Do we trust the backend to set this?
-    ports[port_id]['zone'] = zone
-
-def do_backend_unbind(backend, port_id):
-    """Helper function to get a port unbound from the backend.
-
-    Once unbound, the port becomes ownerless and can be bound by
-    another service.  When unbound, the compute and network services
-    have mutually agreed to stop exchanging packets at their drop
-    point.
-
-    """
-
-    driver = backend_manager.get_backend_driver(backend)
-    driver.unbind(port_id)
-
 networks = {}
 class VPPNetwork(object):
     def __init__(self, id):
@@ -149,34 +94,17 @@ class VPPPort(object):
 
 	
 
-class Port(Resource):
-    """The resource providing the specific PUT operations to bind and
-    unbind a port.
+bind_args = reqparse.RequestParser()
+bind_args.add_argument('host')
+bind_args.add_argument('device_owner')
+bind_args.add_argument('zone')
+bind_args.add_argument('device_id')
+bind_args.add_argument('pci_profile')
+bind_args.add_argument('rxtx_factor')
 
-    The previous interface relied on setting of certain properties at
-    a given momnt in time to indicate a bind.  We're implementing
-    something more like a method for those operations.
-    """
+class PortBind(Resource):
 
-    def __init__(self, my_host):
-	self.my_host = my_host # Nova's idea of what host we are
-
-	self.ports={}
-
-	self.bind_args = parser = reqparse.RequestParser()
-        self.bind_args.add_argument('host')
-        self.bind_args.add_argument('device_owner')
-        self.bind_args.add_argument('zone')
-        self.bind_args.add_argument('device_id')
-        self.bind_args.add_argument('pci_profile')
-        self.bind_args.add_argument('rxtx_factor')
-
-	self.notify_args = parser = reqparse.RequestParser()
-        self.bind_args.add_argument('event')
-        self.bind_args.add_argument('device_id')
-        self.bind_args.add_argument('device_owner')
-
-    def _bind(self, id):
+    def put(self, id):
 	args = self.bind_args.parse_args()
 	binding_profile={
 	    'pci_profile': args['pci_profile'],
@@ -191,25 +119,22 @@ class Port(Resource):
                             binding_profile)
 	# TODO accepted binding type should be returned to the caller
 
-    def _unbind(self, id):
+
+class PortUnbind(Resource):
+
+    def __init(*args, **kwargs):
+	super('PortBind', self).__init__(*args, **kwargs)
+
+    def put(self, id, host):
 	# Not very distributed-fault-tolerant, but no retries yet
 	do_backend_unbind(backends[ports[id]['backend']], id)
 
-    def put(self, id, op):
-	# Note: contrary to your expectations, this can be called
-	# more than once in bound or unbound state.
-
-	if op == 'bind':
-	    self._bind(id)
-	elif op == 'unbind':
-	    self._unbind(id)
-	else:
-	    return 'Invalid operation on port', 404
 
 ##
 ## Actually setup the Api resource routing here
 ##
-api.add_resource(Port, '/ports/<id>/<op>')
+api.add_resource(PortBind, '/ports/<id>/bind')
+api.add_resource(PortUnbind, '/ports/<id>/unbind/<host>')
 
 
 

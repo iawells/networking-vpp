@@ -41,21 +41,21 @@ function shut_vpp_down {
 
 # The VPP control plane element (we don't at this point start VPP itself TODO)
 
-cp_service_name=vpp-cp
+agent_service_name=vpp-agent
 
-function pre_install_vpp_cp {
+function pre_install_vpp_agent {
     :
 }
 
-function install_vpp_cp {
+function install_vpp_agent {
     :
 }
 
-function init_vpp_cp {
-    run_process $cp_service_name "$VPP_CP_BINARY"
+function init_vpp_agent {
+    run_process $agent_service_name "$VPP_CP_BINARY"
 }
 
-function configure_vpp_cp {
+function configure_vpp_agent {
     cat >/etc/neutron/plugins/ml2/ml2_conf_vpp.ini
 [ml2_vpp]
 
@@ -64,14 +64,14 @@ EOF
 
 }
 
-function shut_vpp_cp_down {
-    stop_process $cp_service_name
+function shut_vpp_agent_down {
+    stop_process $agent_service_name
 }
 
 
 
-cp_do() {
-    if is_service_enabled "$cp_service_name"; then
+agent_do() {
+    if is_service_enabled "$agent_service_name"; then
 	"$@"
     fi
 }
@@ -80,31 +80,31 @@ if [[ "$1" == "stack" && "$2" == "pre-install" ]]; then
     # Set up system services
     echo_summary "Configuring system services $name"
     pre_install_vpp
-    cp_do pre_install_vpp_cp
+    agent_do pre_install_vpp_agent
 
 elif [[ "$1" == "stack" && "$2" == "install" ]]; then
     # Perform installation of service source
     echo_summary "Installing $name"
     install_vpp
-    cp_do install_vpp_cp
+    agent_do install_vpp_agent
 
 elif [[ "$1" == "stack" && "$2" == "post-config" ]]; then
     # Configure after the other layer 1 and 2 services have been configured
     echo_summary "Configuring $name"
     configure_vpp
-    cp_do configure_vpp_cp
+    agent_do configure_vpp_agent
 
 elif [[ "$1" == "stack" && "$2" == "extra" ]]; then
 # Initialize and start the service
     echo_summary "Initializing $name"
     init_vpp
-    cp_do init_vpp_cp
+    agent_do init_vpp_agent
 fi
 
 if [[ "$1" == "unstack" ]]; then
     # Shut down services
     shut_vpp_down
-    cp_do shut_vpp_cp_down
+    agent_do shut_vpp_agent_down
 fi
 
 if [[ "$1" == "clean" ]]; then
