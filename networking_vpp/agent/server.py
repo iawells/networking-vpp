@@ -28,10 +28,13 @@
 # worked out.  The two codebases will merge in the future.
 
 from flask import Flask
-from flask_restful import reqparse, abort, Api, Resource
-import os
+from flask_restful import Api
+from flask_restful import reqparse
+from flask_restful import Resource
 import logging
 import logging.handlers
+import os
+import vpp
 
 # Basic log config
 logger = logging.getLogger('gluon')
@@ -47,99 +50,118 @@ api = Api(app)
 
 ######################################################################
 
-networks = {}
-class VPPNetwork(object):
-    def __init__(self, id):
-	self.id = id
-	self.local_ports = {}
-	self.port_idx = None
-	global networks
-	networks[id] = self
-
-    def dataplane_create(self):
-	
-	# blah
-
-	self.port_idx = port_idx
+VHOSTUSER_DIR = '/tmp'
 
 
-    def dataplane_delete(self):
-	# blah(self.port_idx)
+class VPPForwarder(object):
 
-	self.port_idx = None
+    def __init__(self, external_if):
+        self.vpp = vpp.VPPInterface()
+        self.external_if = external_if
 
-    def maybe_cleanup(self):
-	if self.local_ports == {}:
-	    self.dataplane_delete(self)
+        self.networks = {}      # vlan: bridge index
+        self.interfaces = {}    # uuid: if idx
 
-class VPPPort(object):
-    def __init__(self, id, network_id):
-	self.id = id
-	global networks
-	if not networks[network_id]:
-	    VPPNetwork(network_id)
-	self.network = networks[network_id]
-	self.port_idx = None
+        for (ifname, f) in self.vpp.get_interfaces():
+            # Clean up interfaces from previous runs
+
+            # TODO(ijw) can't easily SPOT VLAN subifs to delete
+
+            if ifname.startswith('tap-'):
+                self.vpp.delete_tap(f.swifindex)
+            elif ifname.startswith('VirtualEthernet'):
+                self.vpp.delete_vhostuser(f.swifindex)
+
+            ext_ifstruct = self.vpp.get_interface(external_if)
+            self.ext_ifidx = ext_ifstruct.swifindex
+
+    # This, here, is us creating a VLAN backed network
+    def network_on_host(self, vlan):
+        if vlan not in self.networks:
+            # TODO(ijw): bridge domains have no distinguishing marks.
+            # VPP needs to allow us to name or label them so that we
+            # can find them when we restart
+
+            # TODO(ijw): this VLAN subinterface may already exist, and
+            # may even be in another bridge domain already (see
+            # above).
+            if_upstream = self.vpp.create_vlan_subif(self.ext_ifidx, vlan)
+            self.vpp.ifup(if_upstream)
+
+            br = self.vpp.create_bridge_domain()
+
+            self.vpp.add_to_bridge(br, if_upstream)
+
+            self.networks[vlan] = br
+
+        return self.networks[vlan]
+
+    def create_interface_on_host(self, type, uuid, mac):
+        if uuid not in self.interfaces:
+
+            if type == 'tap':
+                name = uuid[0:11]
+                iface = self.vpp.create_tap(name, mac)
+                props = {'vif_type': 'tap', 'name': name}
+            elif type == 'vhostuser':
+                path = os.path.join(VHOSTUSER_DIR, uuid)
+                iface = self.vpp.create_vhostuser(path, mac)
+                props = {'vif_type': 'vhostuser', 'path': uuid}
+            else:
+                raise Exception('unsupported interface type')
+
+            self.interfaces[uuid] = iface
+
+        return (self.interfaces[uuid], props)
+
+    def bind_interface_on_host(self, type, uuid, mac, vlan):
+        net_br_idx = self.network_on_host(vlan)
+
+        (iface, props) = self.create_interface_on_host(type, uuid, mac)
+
+        self.vpp.ifup(iface)
+        self.vpp.add_to_bridge(net_br_idx, iface)
+
+        return props
 
 
-    def dataplane_create(self):
-	self.network.dataplane_create()
-	self.network.local_ports[id] = self
-
-	# blah(self.network.port_idx)
-
-    def dataplane_delete(self):
-	del self.network.local_ports[id]
-	self.network.maybe_delete()
-
-	
+######################################################################
 
 bind_args = reqparse.RequestParser()
+bind_args.add_argument('mac')
+bind_args.add_argument('vlan')
 bind_args.add_argument('host')
-bind_args.add_argument('device_owner')
-bind_args.add_argument('zone')
-bind_args.add_argument('device_id')
-bind_args.add_argument('pci_profile')
-bind_args.add_argument('rxtx_factor')
+
+vppf = VPPForwarder('GigabitEthernet2/2/0')  # TODO(ijw) make config
+
 
 class PortBind(Resource):
 
     def put(self, id):
-	args = self.bind_args.parse_args()
-	binding_profile={
-	    'pci_profile': args['pci_profile'],
-	    'rxtx_factor': args['rxtx_factor']
-	    # TODO add negotiation here on binding types that are valid
-            # (requires work in Nova)
-	}
-	accepted_binding_type = \
-            do_backend_bind(backends[ports[id]['backend']], id,
-                            args['device_owner'], args['zone'], 
-                            args['device_id'], args['host'],
-                            binding_profile)
-	# TODO accepted binding type should be returned to the caller
+        global vppf
+
+        args = self.bind_args.parse_args()
+        vppf.bind_interface_on_host('vhostuser',
+                                    id,
+                                    args['mac'],
+                                    args['vlan'])
 
 
 class PortUnbind(Resource):
 
-    def __init(*args, **kwargs):
-	super('PortBind', self).__init__(*args, **kwargs)
+    def __init(self, *args, **kwargs):
+        super('PortBind', self).__init__(*args, **kwargs)
 
     def put(self, id, host):
-	# Not very distributed-fault-tolerant, but no retries yet
-	do_backend_unbind(backends[ports[id]['backend']], id)
+        pass  # should destroy interface, but doesn't yet
 
 
-##
-## Actually setup the Api resource routing here
-##
 api.add_resource(PortBind, '/ports/<id>/bind')
 api.add_resource(PortUnbind, '/ports/<id>/unbind/<host>')
 
 
-
-# TODO port should probably be configurable.
 def main():
+    # TODO(ijw) port etc. should probably be configurable.
     app.run(debug=True, port=2704)
 
 if __name__ == '__main__':

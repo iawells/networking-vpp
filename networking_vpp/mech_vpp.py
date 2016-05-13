@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import json
 from oslo_config import cfg
 from oslo_log import log as logging
 import requests
@@ -34,11 +35,12 @@ cfg.CONF.register_opts(vpp_opts, "ml2_vpp")
 class VPPMechanismDriver(api.MechanismDriver):
     supported_vnic_types = [portbindings.VNIC_NORMAL]
     allowed_network_types = [p_constants.TYPE_VLAN]
+    MECH_NAME = 'vpp'
 
     # TODO(ijw): we have no agent registration because we're not using
     # Neutron style agents, so at the moment we make up one physical net
     # that all 'agents' are assumed to know.
-    physical_networks = ['physnet1']
+    physical_networks = ['physnet']
 
     def initialize(self):
         self.communicator = AgentCommunicator()
@@ -96,12 +98,16 @@ class VPPMechanismDriver(api.MechanismDriver):
             return
 
         for segment in context.segments_to_bind:
-            if self.check_segment(segment, context.host()):
+            if self.check_segment(segment, context.host):
                 context.set_binding(segment[api.ID],
                                     self.vif_type,
                                     self.vif_details)
                 LOG.debug("Bound using segment: %s", segment)
                 return
+
+    # TODO(ijw) TBD
+    vif_type = 'vhostuser'
+    vif_details = {}
 
     def check_segment(self, segment, host):
         """Check if segment can be bound.
@@ -114,7 +120,7 @@ class VPPMechanismDriver(api.MechanismDriver):
 
         # TODO(ijw): naive - doesn't check host, or configured
         # physnets on the host.  Should work out if the binding
-	# can't be achieved before accepting it
+        # can't be achieved before accepting it
 
         network_type = segment[api.NETWORK_TYPE]
         if network_type not in self.allowed_network_types:
@@ -145,8 +151,8 @@ class VPPMechanismDriver(api.MechanismDriver):
                 LOG.debug(
                     'Network %(network_id)s is connected to physical '
                     'network %(physnet)s, but the physical network '
-                    ' is not one this mechdriver knows.  The physical network '
-                    ' must be known if binding is to succeed.',
+                    'is not one this mechdriver knows.  The physical network '
+                    'must be known if binding is to succeed.',
                     {'network_id': segment['id'],
                      'physnet': physnet}
                 )
@@ -179,29 +185,40 @@ class VPPMechanismDriver(api.MechanismDriver):
         # ignore it.  Doing less work is nevertheless good, so we
         # should in future avoid the send.
 
-        current_bind = context.binding_levels.get(-1)
-        prev_bind = context.original_binding_levels.get(-1)
-        if current_bind is not None and \
-           current_bind.BOUND_DRIVER == self:
-            # then send the bind out
-            self.communicator.queue_bind(context.id,
-                                         context.segment,
-                                         context.host())
-        if prev_bind is not None and prev_bind.BOUND_DRIVER == self:
-            if current_bind is None or current_bind.BOUND_DRIVER != self:
+        LOG.error('in postcommit')
+
+        if context.binding_levels is not None:
+            current_bind = context.binding_levels[-1]
+            if context.original_binding_levels is None:
+                prev_bind = None
+            else:
+                prev_bind = context.original_binding_levels.get[-1]
+            LOG.error('bindey bindey %s' % str(current_bind))
+            if (current_bind is not None and
+               current_bind.get(api.BOUND_DRIVER) == self.MECH_NAME):
+                LOG.error('MY bindey!')
+                # then send the bind out (may equally be an update on a bound
+                # port)
+                self.communicator.bind(context.current,
+                                       current_bind[api.BOUND_SEGMENT],
+                                       context.host)
+            elif (prev_bind is not None and
+                  prev_bind.get(api.BOUND_DRIVER) == self.MECH_NAME):
+                LOG.error('unbindey, aww')
                 # If we were the last binder of this port but are no longer
-                self.communicator.queue_unbind(context.current(),
-                                               context.original_host())
+                self.communicator.unbind(context.current,
+                                         context.original_host)
+        LOG.error('leaving postcommit')
 
 
 class AgentCommunicator(object):
     def __init__(self):
-	if cfg.CONF.ml2_vpp.agents is None:
-	    LOG.error('ml2_vpp needs agents configured right now')
+        if cfg.CONF.ml2_vpp.agents is None:
+            LOG.error('ml2_vpp needs agents configured right now')
 
         self.agents = cfg.CONF.ml2_vpp.agents.split(';')
 
-    def bind(self, port):
+    def bind(self, port, segment, host):
         """Queue up a bind message for sending.
 
         This is called in the sequence of a REST call and should take
@@ -209,7 +226,7 @@ class AgentCommunicator(object):
         """
         # TODO(ijw): should queue the bind, not send it
 
-        self.send_bind(msg)
+        self.send_bind(port, segment, host)
 
     def unbind(self, port, host):
         """Queue up an unbind message for sending.
@@ -220,13 +237,14 @@ class AgentCommunicator(object):
         # TODO(ijw): should queue the unbind, not send it
         self.send_unbind(port, host)
 
-    def send_bind(self, port):
-	port_json = json.dumps(port)
+    def send_bind(self, port, segment, host):
+        port_json = json.dumps({'port': port, 'segment': segment})
         self._broadcast_msg('ports/%s/bind' % port['id'], port_json)
 
     def send_unbind(self, port, host):
-	port_json = json.dumps(port)
-        self._broadcast_msg('ports/%s/unbind/%s' % (port['id'], host), port_json)
+        port_json = json.dumps({'port': port})
+        self._broadcast_msg('ports/%s/unbind/%s' % (port['id'], host),
+                            port_json)
 
     def _broadcast_msg(self, urlfrag, msg):
         # TODO(ijw): since we pretty much always know the host to which the
@@ -234,6 +252,6 @@ class AgentCommunicator(object):
         # to broadcast this, but right now this saves us config work.
         # In a small cloud with not too many ports the workload on the
         # agents is not onerous.
-	LOG.debug('broadcasting message %(msg)s' % {msg: str(msg)})
+        LOG.error('broadcasting message %(msg)s' % {'msg': str(msg)})
         for url in self.agents:
             requests.put(url + urlfrag, msg)
