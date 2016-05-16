@@ -68,9 +68,9 @@ class VPPForwarder(object):
             # TODO(ijw) can't easily SPOT VLAN subifs to delete
 
             if ifname.startswith('tap-'):
-                self.vpp.delete_tap(f.swifindex)
+                self.vpp.delete_tap(f.sw_if_index)
             elif ifname.startswith('VirtualEthernet'):
-                self.vpp.delete_vhostuser(f.swifindex)
+                self.vpp.delete_vhostuser(f.sw_if_index)
 
             ext_ifstruct = self.vpp.get_interface(external_if)
             self.ext_ifidx = ext_ifstruct.swifindex
