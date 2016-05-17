@@ -14,11 +14,14 @@
 #    under the License.
 
 
+import pwd
+import grp
+import os
 import vpp_papi
 
 
 def mac_to_bytes(mac):
-    return ''.join(chr(int(x, base=16)) for x in mac.split(':'))
+    return str(''.join(chr(int(x, base=16)) for x in mac.split(':')))
 
 
 def fix_string(s):
@@ -34,7 +37,7 @@ def _vpp_cb(*args, **kwargs):
 def _check_retval(t):
     if t.retval != 0:
         print ('FAIL? retval here is %s' % t.retval)
-        raise Exception('failed in backend')
+#        raise Exception('failed in backend')
 
 
 # Sometimes a callback fires unexpectedly.  We need to catch them
@@ -49,11 +52,10 @@ class VPPInterface(object):
 
         for interface in t:
             if interface.vlmsgid == vpp_papi.VL_API_SW_INTERFACE_DETAILS:
-                yield (fix_string(interface.interfacename, interface))
+                yield (fix_string(interface.interfacename), interface)
 
     def get_interface(self, name):
-        for f in self.get_interfaces():
-            ifname = fix_string(f.interfacename)
+        for (ifname, f) in self.get_interfaces():
             if ifname == name:
                 return f
 
@@ -86,8 +88,9 @@ class VPPInterface(object):
     #############################
 
     def create_vhostuser(self, ifpath, mac):
-        t = vpp_papi.create_vhost_user_if(True,  # is a server,
-                                          ifpath,
+	print 'Creating %s as a port' % ifpath
+        t = vpp_papi.create_vhost_user_if(True,  # is a server?
+                                          str(ifpath),  # unicode not allowed.
                                           False,  # Who knows what renumber is?
                                           0,  # custom_dev_instance
                                           True,  # use custom MAC
@@ -95,6 +98,12 @@ class VPPInterface(object):
                                           )
 
         _check_retval(t)
+
+	# The permission that qemu runs as (TODO(ijw): should be configurable)
+	uid = pwd.getpwnam("libvirt-qemu").pw_uid
+	gid = grp.getgrnam("kvm").gr_gid
+	os.chown(ifpath, uid, gid)
+	os.chmod(ifpath, 0770)
 
         return t.swifindex
 
@@ -107,15 +116,13 @@ class VPPInterface(object):
 
     def __init__(self):
         self.r = vpp_papi.connect("test_papi")
-        self._bd_next = 5678  # bridge domain number
 
     def disconnect(self):
         vpp_papi.disconnect()
 
-    def create_bridge_domain(self):
-
+    def create_bridge_domain(self, id):
         t = vpp_papi.bridge_domain_add_del(
-            self._bd_next,  # the ID of this domain
+            id,  # the numeric ID of this domain
             True,  # enable bcast and mcast flooding
             True,  # enable unknown ucast flooding
             True,  # enable forwarding on all interfaces
@@ -126,8 +133,6 @@ class VPPInterface(object):
 
         _check_retval(t)
 
-        self._bd_next += 1
-        return self._bd_next - 1
 
     def create_vlan_subif(self, if_id, vlan_tag):
         t = vpp_papi.create_vlan_subif(

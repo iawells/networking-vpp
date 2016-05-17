@@ -54,7 +54,7 @@ function install_vpp_agent {
 function init_vpp_agent {
     # sudo for now, as it needs to connect to VPP and for that requires root privs
     # to share its shmem comms channel
-    run_process sudo $agent_service_name "$VPP_CP_BINARY"
+    run_process $agent_service_name "sudo $VPP_CP_BINARY"
 }
 
 function configure_vpp_agent {
@@ -111,3 +111,13 @@ if [[ "$1" == "clean" ]]; then
     :
 fi
 vpp_debug tput setab 9
+
+function neutron_plugin_install_agent_packages {
+    install_package bridge-utils
+}
+
+# We have opinions on the interface driver that should attach agents
+function neutron_plugin_setup_interface_driver {
+    local conf_file=$1
+    iniset $conf_file DEFAULT interface_driver linuxbridge
+}
