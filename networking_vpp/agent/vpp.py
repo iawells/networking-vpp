@@ -14,9 +14,9 @@
 #    under the License.
 
 
-import pwd
 import grp
 import os
+import pwd
 import vpp_papi
 
 
@@ -88,7 +88,7 @@ class VPPInterface(object):
     #############################
 
     def create_vhostuser(self, ifpath, mac):
-	print 'Creating %s as a port' % ifpath
+        print ('Creating %s as a port' % ifpath)
         t = vpp_papi.create_vhost_user_if(True,  # is a server?
                                           str(ifpath),  # unicode not allowed.
                                           False,  # Who knows what renumber is?
@@ -99,11 +99,12 @@ class VPPInterface(object):
 
         _check_retval(t)
 
-	# The permission that qemu runs as (TODO(ijw): should be configurable)
-	uid = pwd.getpwnam("libvirt-qemu").pw_uid
-	gid = grp.getgrnam("kvm").gr_gid
-	os.chown(ifpath, uid, gid)
-	os.chmod(ifpath, 0770)
+        # The permission that qemu runs as (TODO(ijw): should be
+        # configurable)
+        uid = pwd.getpwnam("libvirt-qemu").pw_uid
+        gid = grp.getgrnam("kvm").gr_gid
+        os.chown(ifpath, uid, gid)
+        os.chmod(ifpath, 0o770)
 
         return t.swifindex
 
@@ -132,7 +133,6 @@ class VPPInterface(object):
         )
 
         _check_retval(t)
-
 
     def create_vlan_subif(self, if_id, vlan_tag):
         t = vpp_papi.create_vlan_subif(

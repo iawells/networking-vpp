@@ -13,20 +13,18 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import json
+import eventlet.queue
 from oslo_config import cfg
 from oslo_log import log as logging
 import requests
-
-import eventlet.queue
 import threading
-from neutron import context as n_context
-from neutron import manager
+
 from neutron.common import constants as n_const
+from neutron import context as n_context
 from neutron.extensions import portbindings
+from neutron import manager
 from neutron.plugins.common import constants as p_constants
 from neutron.plugins.ml2 import driver_api as api
-from neutron.agent.linux import interface
 from neutron_lib import constants as nl_const
 
 LOG = logging.getLogger(__name__)
@@ -50,7 +48,7 @@ class VPPMechanismDriver(api.MechanismDriver):
     physical_networks = ['physnet']
 
     def initialize(self):
-        self.communicator = AgentCommunicator() 
+        self.communicator = AgentCommunicator()
 
     def bind_port(self, port_context):
         """Attempt to bind a port.
@@ -98,7 +96,7 @@ class VPPMechanismDriver(api.MechanismDriver):
                   {'port': port_context.current['id'],
                    'network': port_context.network.current['id']})
         vnic_type = port_context.current.get(portbindings.VNIC_TYPE,
-                                        portbindings.VNIC_NORMAL)
+                                             portbindings.VNIC_NORMAL)
         if vnic_type not in self.supported_vnic_types:
             LOG.debug("Refusing to bind due to unsupported vnic_type: %s",
                       vnic_type)
@@ -106,16 +104,16 @@ class VPPMechanismDriver(api.MechanismDriver):
 
         for segment in port_context.segments_to_bind:
             if self.check_segment(segment, port_context.host):
-		vif_details = dict(self.vif_details)
-		# TODO(ijw) should be in a library that the agent uses
-		vif_details['vhostuser_socket'] = \
-		    '/tmp/%s' % port_context.current['id']
-		vif_details['vhostuser_mode'] = \
-		    'client'
-		LOG.error('setting details: %s', vif_details)
+                vif_details = dict(self.vif_details)
+                # TODO(ijw) should be in a library that the agent uses
+                vif_details['vhostuser_socket'] = \
+                    '/tmp/%s' % port_context.current['id']
+                vif_details['vhostuser_mode'] = \
+                    'client'
+                LOG.error('setting details: %s', vif_details)
                 port_context.set_binding(segment[api.ID],
-                                    self.vif_type,
-                                    vif_details)
+                                         self.vif_type,
+                                         vif_details)
                 LOG.debug("Bound using segment: %s", segment)
                 return
 
@@ -216,7 +214,7 @@ class VPPMechanismDriver(api.MechanismDriver):
             bind_type = 'vhostuser'
 
             owner = port_context.current['device_owner']
-        
+
             for f in nl_const.DEVICE_OWNER_PREFIXES:
                 if owner.startswith(f):
                     bind_type = 'plugtap'
@@ -245,23 +243,23 @@ class AgentCommunicator(object):
 
         self.agents = cfg.CONF.ml2_vpp.agents.split(';')
         self.recursive = False
-	self.queue = eventlet.queue.Queue()
+        self.queue = eventlet.queue.Queue()
         self.sync_thread = threading.Thread(
             name='vpp-sync',
             target=self._worker)
         self.sync_thread.start()
 
-    def _worker():
-	while True:
-	    msg = self.queue.get()
-	    op = msg[0]
-	    args=msg[1:]
-	    if op == 'bind':
-		self.send_bind(*args)
-	    elif op == 'unbind':
-		self.send_unbind(*args)
-	    else:
-		LOG.error('unknown queue op %s' % str(op))
+    def _worker(self):
+        while True:
+            msg = self.queue.get()
+            op = msg[0]
+            args = msg[1:]
+            if op == 'bind':
+                self.send_bind(*args)
+            elif op == 'unbind':
+                self.send_unbind(*args)
+            else:
+                LOG.error('unknown queue op %s' % str(op))
 
     def bind(self, port, segment, host, type):
         """Queue up a bind message for sending.
@@ -271,7 +269,7 @@ class AgentCommunicator(object):
         """
         # TODO(ijw): should queue the bind, not send it
 
-	self.queue.put(['bind', port, segment, host, type])
+        self.queue.put(['bind', port, segment, host, type])
         self.send_bind(port, segment, host, type)
 
     def unbind(self, port, host):
@@ -295,23 +293,25 @@ class AgentCommunicator(object):
         }
         self._broadcast_msg('ports/%s/bind' % port['id'], data)
 
-	# This should only be sent when we're certain that the port
-	# is bound If this is in a bg thread, it should be sent there,
-	# and it should only go when we have confirmed that the far end
-	# has done its work.  The VM will start when it's called and
-	# will wait until then.  For us this is useful beyond the usual
-	# reasons of deplying the VM start until DHCP can be reached,
-	# because we know the server socket is in place for the port.
- 
-	context = n_context.get_admin_context()
+        # This should only be sent when we're certain that the port
+        # is bound If this is in a bg thread, it should be sent there,
+        # and it should only go when we have confirmed that the far end
+        # has done its work.  The VM will start when it's called and
+        # will wait until then.  For us this is useful beyond the usual
+        # reasons of deplying the VM start until DHCP can be reached,
+        # because we know the server socket is in place for the port.
+
+        context = n_context.get_admin_context()
         plugin = manager.NeutronManager.get_plugin()
-	# Bodge
-	if self.recursive:
-	    LOG.warning('Your recursion check hit on activating port')
-	else:
-	    self.recursive = True
-	    plugin.update_port_status(context, port['id'], n_const.PORT_STATUS_ACTIVE, host=host)
-	    self.recursive = False
+        # Bodge
+        if self.recursive:
+            LOG.warning('Your recursion check hit on activating port')
+        else:
+            self.recursive = True
+            plugin.update_port_status(context, port['id'],
+                                      n_const.PORT_STATUS_ACTIVE,
+                                      host=host)
+            self.recursive = False
 
     def send_unbind(self, port, host):
         data = {}

@@ -34,9 +34,10 @@ from flask_restful import Resource
 import logging
 import logging.handlers
 import os
-import sys
 import vpp
+
 from neutron.agent.linux import bridge_lib
+from neutron.agent.linux import ip_lib
 from neutron.common import constants as n_const
 
 
@@ -49,6 +50,8 @@ app = Flask('vpp-agent')
 # that Neutron can find for its agents.
 
 DEV_NAME_PREFIX = n_const.TAP_DEVICE_PREFIX
+
+
 def get_tap_name(uuid):
     return n_const.TAP_DEVICE_PREFIX + uuid[0:11]
 
@@ -56,11 +59,12 @@ def get_tap_name(uuid):
 # name that it will be able to locate
 
 VHOSTUSER_DIR = '/tmp'
+
+
 def get_vhostuser_name(uuid):
     return os.path.join(VHOSTUSER_DIR, uuid)
 
 ######################################################################
-
 
 
 class VPPForwarder(object):
@@ -100,8 +104,10 @@ class VPPForwarder(object):
             if_upstream = self.vpp.create_vlan_subif(self.ext_ifidx, vlan)
             self.vpp.ifup(if_upstream)
 
+            # May not remain this way but we use the VLAN
+            # ID as the bridge ID
             self.vpp.create_bridge_domain(vlan)
-	    br = vlan  # May not remain this way but we use the VLAN ID as the bridge ID
+            br = vlan
 
             self.vpp.add_to_bridge(br, if_upstream)
 
@@ -145,29 +151,34 @@ class VPPForwarder(object):
         else:
             bridge_device = bridge_lib.BridgeDevice(bridge_name)
 
-        if not interface:
-            return bridge_name
+        # TODO(ijw): should be checking this all succeeded
 
     # end theft
     ########################################
 
     def create_interface_on_host(self, type, uuid, mac):
         if uuid not in self.interfaces:
-            app.logger.debug('bind port - not in list %s', ', '.join(self.interfaces.keys()))
+            app.logger.debug('bind port - not in list %s',
+                             ', '.join(self.interfaces.keys()))
+
+            # TODO(ijw): naming not obviously consistent with
+            # Neutron's naming
+            name = uuid[0:11]
+            bridge_name = 'br-' + name
+            tap_name = 'tap-' + name
 
             if type == 'maketap' or type == 'plugtap':
-                # TODO(ijw): naming not obviously consistent with Neutron's naming
-                name = uuid[0:11]
-                iface = self.vpp.create_tap('vht-' + name, mac)
+                iface = self.vpp.create_tap(tap_name, mac)
                 if type == 'maketap':
-                    props = {'vif_type': 'maketap', 'name': 'vht-' + name}
+                    props = {'vif_type': 'maketap', 'name': tap_name}
                 else:
-                    br = ensure_bridge('br-' + name)
-                    props = {'vif_type': 'plugtap', 'name': 'br-' + name}
+                    self.ensure_bridge(bridge_name)
+                    props = {'vif_type': 'plugtap', 'name': bridge_name}
 
-                    # TODO(ijw): someone somewhere ought to be sorting the MTUs out
-                    bridge_lib.BridgeDevice(br).addif('tap-' + name)
-                                        
+                    # TODO(ijw): someone somewhere ought to be sorting
+                    # the MTUs out
+                    bridge_lib.BridgeDevice(bridge_name).addif(tap_name)
+
             elif type == 'vhostuser':
                 path = get_vhostuser_name(uuid)
                 iface = self.vpp.create_vhostuser(path, mac)
@@ -192,7 +203,7 @@ class VPPForwarder(object):
 
     def unbind_interface_on_host(self, type, uuid):
         app.logger.debug('TODO(ijw) unbind port %s', uuid)
-        
+
         pass
 
 
@@ -214,10 +225,11 @@ class PortBind(Resource):
         global vppf
 
         args = self.bind_args.parse_args()
-	app.logger.debug('on host %s, binding %s %d to mac %s id %s' % (args['host'], 
-                                                                        args['network_type'], 
-                                                                        args['segmentation_id'], 
-                                                                        args['mac_address'], id))
+        app.logger.debug('on host %s, binding %s %d to mac %s id %s'
+                         % (args['host'],
+                            args['network_type'],
+                            args['segmentation_id'],
+                            args['mac_address'], id))
         vppf.bind_interface_on_host('vhostuser',
                                     id,
                                     args['mac_address'],
@@ -254,4 +266,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
