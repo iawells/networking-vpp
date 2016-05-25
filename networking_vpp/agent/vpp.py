@@ -143,6 +143,20 @@ class VPPInterface(object):
 
         return t.swifindex
 
+    def create_srcrep_vxlan_subif(self, vrf_id, src_addr, bcast_addr, vnid):
+        t = vpp_papi.vxlan_add_del_tunnel(
+            true,  # is_add
+            src_addr,
+            bcast_addr,
+            vrf_id,
+            decap_next_index,   # what is this?
+            vni)
+
+        _check_retval(t)
+
+        return t.swifindex
+        
+    
     ########################################
 
     def add_to_bridge(self, bridx, *ifidxes):

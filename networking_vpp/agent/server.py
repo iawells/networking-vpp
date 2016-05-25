@@ -31,18 +31,16 @@ from flask import Flask
 from flask_restful import Api
 from flask_restful import reqparse
 from flask_restful import Resource
-import logging
-import logging.handlers
 import os
+import sys
 import vpp
 
 from neutron.agent.linux import bridge_lib
 from neutron.agent.linux import ip_lib
 from neutron.common import constants as n_const
-
-
-# Basic Flask RESTful app setup
-app = Flask('vpp-agent')
+from networking_vpp import config_opts
+from oslo_config import cfg
+from oslo_log import log as logging
 
 ######################################################################
 
@@ -69,10 +67,24 @@ def get_vhostuser_name(uuid):
 
 class VPPForwarder(object):
 
-    def __init__(self, external_if):
+    def __init__(self, vlan_trunk_if=None,
+                 vxlan_src_addr=None,
+                 vxlan_bcast_addr=None,
+                 vxlan_vrf=None):
         self.vpp = vpp.VPPInterface()
-        self.external_if = external_if
 
+        # This is the trunk interface for VLAN networking
+        self.trunk_if = vlan_trunk_if
+
+        # This is the address we'll use if we plan on broadcasting
+        # vxlan packets
+        self.vxlan_bcast_addr = vxlan_bcast_addr
+        self.vxlan_src_addr = vxlan_src_addr
+        self.vxlan_vrf = vxlan_vrf
+
+        # Used as a unique number for bridge IDs
+        self.next_bridge_id = 5678
+        
         self.networks = {}      # vlan: bridge index
         self.interfaces = {}    # uuid: if idx
 
@@ -88,32 +100,57 @@ class VPPForwarder(object):
                 # all VPP vhostuser interfaces are of this form
                 self.vpp.delete_vhostuser(f.swifindex)
 
-            ext_ifstruct = self.vpp.get_interface(external_if)
-            self.ext_ifidx = ext_ifstruct.swifindex
+            trunk_ifstruct = self.vpp.get_interface(self.trunk_if)
+	    if trunk_ifstruct is None:
+		raise Exception("Could not find interface %s" % self.trunk_if)
+            self.trunk_ifidx = trunk_ifstruct.swifindex
 
+            # This interface is not automatically up just because
+            # we've started and we need to ensure it is before
+            # proceeding.
+
+            # TODO(ijw): when we start up in a recovery mode we may
+            # want to check the local VPP config and bring it up when
+            # confirmed.
+            self.vpp.ifup(self.trunk_ifidx)
+            
     # This, here, is us creating a VLAN backed network
-    def network_on_host(self, vlan):
-        if vlan not in self.networks:
+    def network_on_host(self, type, seg_id):
+        if (type, seg_id) not in self.networks:
             # TODO(ijw): bridge domains have no distinguishing marks.
             # VPP needs to allow us to name or label them so that we
             # can find them when we restart
 
-            # TODO(ijw): this VLAN subinterface may already exist, and
-            # may even be in another bridge domain already (see
-            # above).
-            if_upstream = self.vpp.create_vlan_subif(self.ext_ifidx, vlan)
+            if type == 'vlan':
+                # TODO(ijw): this VLAN subinterface may already exist, and
+                # may even be in another bridge domain already (see
+                # above).
+                if_upstream = self.vpp.create_vlan_subif(self.trunk_ifidx,
+                                                         seg_id)
+            elif type == 'vxlan':
+                if_upstream = \
+                    self.vpp.create_srcrep_vxlan_subif(self, self.vxlan_vrf,
+                                                       self.vxlan_src_addr,
+                                                       self.vxlan_bcast_addr,
+                                                       seg_id)
+            else:
+                raise Exception('type %s not supported', type)
+            
             self.vpp.ifup(if_upstream)
+                
+            # May not remain this way but we use the VLAN ID as the
+            # bridge ID; TODO(ijw): bridge ID can already exist, we
+            # should check till we find a free one
+            id = self.next_bridge_id
+            self.next_bridge_id += 1
 
-            # May not remain this way but we use the VLAN
-            # ID as the bridge ID
-            self.vpp.create_bridge_domain(vlan)
-            br = vlan
+            self.vpp.create_bridge_domain(id)
 
-            self.vpp.add_to_bridge(br, if_upstream)
+            self.vpp.add_to_bridge(id, if_upstream)
 
-            self.networks[vlan] = br
+            self.networks[(type, seg_id)] = id
 
-        return self.networks[vlan]
+        return self.networks[(type, seg_id)]
 
     ########################################
     # stolen from LB driver
@@ -191,27 +228,22 @@ class VPPForwarder(object):
             app.logger.debug('skipping a repeated bind')
         return self.interfaces[uuid]
 
-    def bind_interface_on_host(self, type, uuid, mac, vlan):
-        net_br_idx = self.network_on_host(vlan)
-
-        (iface, props) = self.create_interface_on_host(type, uuid, mac)
+    def bind_interface_on_host(self, if_type, uuid, mac, net_type, seg_id):
+        net_br_idx = self.network_on_host(net_type, seg_id)
+        (iface, props) = self.create_interface_on_host(if_type, uuid, mac)
 
         self.vpp.ifup(iface)
         self.vpp.add_to_bridge(net_br_idx, iface)
 
         return props
 
-    def unbind_interface_on_host(self, type, uuid):
+    def unbind_interface_on_host(self, uuid):
         app.logger.debug('TODO(ijw) unbind port %s', uuid)
 
         pass
 
 
 ######################################################################
-
-
-vppf = VPPForwarder('GigabitEthernet2/2/0')  # TODO(ijw) make config
-
 
 class PortBind(Resource):
     bind_args = reqparse.RequestParser()
@@ -233,6 +265,7 @@ class PortBind(Resource):
         vppf.bind_interface_on_host('vhostuser',
                                     id,
                                     args['mac_address'],
+                                    'vlan',
                                     args['segmentation_id'])
 
 
@@ -247,22 +280,38 @@ class PortUnbind(Resource):
         vppf.unbind_interface_on_host(id)
 
 
-api = Api(app)
+LOG = logging.getLogger('vpp-agent')
 
-api.add_resource(PortBind, '/ports/<id>/bind')
-api.add_resource(PortUnbind, '/ports/<id>/unbind/<host>')
-
+# Basic Flask RESTful app setup
+app = Flask('vpp-agent')
 
 def main():
     app.debug = True
 
-    logger = logging.getLogger('werkzeug')
-    logger.setLevel(logging.INFO)
+#    logger = logging.getLogger('werkzeug')
+#    logger.setLevel(logging.INFO)
 
     # Basic log config
     app.logger.debug('Debug logging enabled')
     # TODO(ijw) port etc. should probably be configurable.
+
+    cfg.CONF(sys.argv[1:])
+    global vppf
+    vppf = VPPForwarder(vlan_trunk_if=cfg.CONF.ml2_vpp.vlan_trunk_if,
+                        vxlan_src_addr=cfg.CONF.ml2_vpp.vxlan_src_addr,
+                        vxlan_bcast_addr=cfg.CONF.ml2_vpp.vxlan_bcast_addr,
+                        vxlan_vrf=cfg.CONF.ml2_vpp.vxlan_vrf)
+
+
+
+    api = Api(app)
+
+    api.add_resource(PortBind, '/ports/<id>/bind')
+    api.add_resource(PortUnbind, '/ports/<id>/unbind/<host>')
+
+
     app.run(port=2704)
 
 if __name__ == '__main__':
+
     main()

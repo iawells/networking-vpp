@@ -32,6 +32,23 @@ function init_vpp {
 
 function configure_vpp {
     iniset /$Q_PLUGIN_CONF_FILE ml2_vpp agents $MECH_VPP_AGENTLIST
+
+    if [ ! -z "$VLAN_TRUNK_IF" ] ; then
+	iniset /$Q_PLUGIN_CONF_FILE ml2_vpp vlan_trunk_if $VLAN_TRUNK_IF
+    fi
+	
+    if [ ! -z "$VXLAN_SRC_ADDR" ] ; then
+	iniset /$Q_PLUGIN_CONF_FILE ml2_vpp vxlan_src_addr $VXLAN_SRC_ADDR
+    fi
+	
+    if [ ! -z "$VXLAN_BCAST_ADDR" ] ; then
+	iniset /$Q_PLUGIN_CONF_FILE ml2_vpp vxlan_bcast_addr $VXLAN_BCAST_ADDR
+    fi
+	
+    if [ ! -z "$VXLAN_VRF" ] ; then
+	iniset /$Q_PLUGIN_CONF_FILE ml2_vpp vxlan_vrf $VXLAN_VRF
+    fi
+
 }
 
 function shut_vpp_down {
@@ -54,7 +71,7 @@ function install_vpp_agent {
 function init_vpp_agent {
     # sudo for now, as it needs to connect to VPP and for that requires root privs
     # to share its shmem comms channel
-    run_process $agent_service_name "sudo $VPP_CP_BINARY"
+    run_process $agent_service_name "sudo $VPP_CP_BINARY --config-file /$Q_PLUGIN_CONF_FILE"
 }
 
 function configure_vpp_agent {
