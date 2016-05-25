@@ -265,7 +265,7 @@ class PortBind(Resource):
         vppf.bind_interface_on_host('vhostuser',
                                     id,
                                     args['mac_address'],
-                                    'vlan',
+                                    args['network_type'],
                                     args['segmentation_id'])
 
 

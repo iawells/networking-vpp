@@ -39,7 +39,7 @@ cfg.CONF.register_opts(vpp_opts, "ml2_vpp")
 
 class VPPMechanismDriver(api.MechanismDriver):
     supported_vnic_types = [portbindings.VNIC_NORMAL]
-    allowed_network_types = [p_constants.TYPE_VLAN]
+    allowed_network_types = [p_constants.TYPE_VLAN,p_constants.TYPE_VXLAN]
     MECH_NAME = 'vpp'
 
     # TODO(ijw): we have no agent registration because we're not using
@@ -117,7 +117,7 @@ class VPPMechanismDriver(api.MechanismDriver):
                 LOG.debug("Bound using segment: %s", segment)
                 return
 
-    # TODO(ijw) TBD
+    # TODO(ijw) should be pulled from a constants file
     vif_type = 'vhostuser'
     vif_details = {}
 
@@ -135,16 +135,6 @@ class VPPMechanismDriver(api.MechanismDriver):
         # can't be achieved before accepting it
 
         network_type = segment[api.NETWORK_TYPE]
-        if network_type not in self.allowed_network_types:
-            LOG.debug(
-                'Network %(network_id)s is of type %(network_type)s '
-                'but this mechanism driver only '
-                'support %(allowed_network_types)s.',
-                {'network_id': segment['id'],
-                 'network_type': network_type,
-                 'allowed_network_types': self.allowed_network_types})
-            return False
-
         if network_type not in self.allowed_network_types:
             LOG.debug(
                 'Network %(network_id)s is %(network_type)s, but this driver '
@@ -205,7 +195,6 @@ class VPPMechanismDriver(api.MechanismDriver):
                 prev_bind = None
             else:
                 prev_bind = port_context.original_binding_levels[-1]
-            LOG.error('bindey bindey %s' % str(current_bind))
 
             # We have to explicitly avoid binding agent ports - DHCP,
             # L3 etc. - as vhostuser. The interface code below takes
@@ -221,7 +210,6 @@ class VPPMechanismDriver(api.MechanismDriver):
 
             if (current_bind is not None and
                current_bind.get(api.BOUND_DRIVER) == self.MECH_NAME):
-                LOG.error('MY bindey!')
                 # then send the bind out (may equally be an update on a bound
                 # port)
                 self.communicator.bind(port_context.current,
@@ -230,7 +218,6 @@ class VPPMechanismDriver(api.MechanismDriver):
                                        bind_type)
             elif (prev_bind is not None and
                   prev_bind.get(api.BOUND_DRIVER) == self.MECH_NAME):
-                LOG.error('unbindey, aww')
                 # If we were the last binder of this port but are no longer
                 self.communicator.unbind(port_context.current,
                                          port_context.original_host)
