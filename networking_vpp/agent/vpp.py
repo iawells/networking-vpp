@@ -52,7 +52,7 @@ class VPPInterface(object):
 
         for interface in t:
             if interface.vl_msg_id == vpp_papi.VL_API_SW_INTERFACE_DETAILS:
-                yield (fix_string(interface.interfacename), interface)
+                yield (fix_string(interface.interface_name), interface)
 
     def get_interface(self, name):
         for (ifname, f) in self.get_interfaces():
@@ -77,7 +77,7 @@ class VPPInterface(object):
 
         _check_retval(t)
 
-        return t.swifindex  # will be -1 on failure (e.g. 'already exists')
+        return t.sw_if_index  # will be -1 on failure (e.g. 'already exists')
 
     def delete_tap(self, idx):
         vpp_papi.tap_delete(idx)
@@ -106,7 +106,7 @@ class VPPInterface(object):
         os.chown(ifpath, uid, gid)
         os.chmod(ifpath, 0o770)
 
-        return t.swifindex
+        return t.sw_if_index
 
     def delete_vhostuser(self, idx):
         t = vpp_papi.delete_vhost_user_if(idx)
@@ -141,7 +141,7 @@ class VPPInterface(object):
 
         _check_retval(t)
 
-        return t.swifindex
+        return t.sw_if_index
 
     def create_srcrep_vxlan_subif(self, vrf_id, src_addr, bcast_addr, vnid):
         t = vpp_papi.vxlan_add_del_tunnel(
@@ -154,7 +154,7 @@ class VPPInterface(object):
 
         _check_retval(t)
 
-        return t.swifindex
+        return t.sw_if_index
         
     
     ########################################
