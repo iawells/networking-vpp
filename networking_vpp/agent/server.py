@@ -95,15 +95,15 @@ class VPPForwarder(object):
 
             if ifname.startswith('tap-'):
                 # all VPP tap interfaces are of this form
-                self.vpp.delete_tap(f.swifindex)
+                self.vpp.delete_tap(f.sw_if_index)
             elif ifname.startswith('VirtualEthernet'):
                 # all VPP vhostuser interfaces are of this form
-                self.vpp.delete_vhostuser(f.swifindex)
+                self.vpp.delete_vhostuser(f.sw_if_index)
 
             trunk_ifstruct = self.vpp.get_interface(self.trunk_if)
 	    if trunk_ifstruct is None:
 		raise Exception("Could not find interface %s" % self.trunk_if)
-            self.trunk_ifidx = trunk_ifstruct.swifindex
+            self.trunk_ifidx = trunk_ifstruct.sw_if_index
 
             # This interface is not automatically up just because
             # we've started and we need to ensure it is before
