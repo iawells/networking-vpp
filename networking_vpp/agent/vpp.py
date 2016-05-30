@@ -88,7 +88,7 @@ class VPPInterface(object):
     #############################
 
     def create_vhostuser(self, ifpath, mac):
-        print ('Creating %s as a port' % ifpath)
+        self.LOG.info('Creating %s as a port' % ifpath)
         t = vpp_papi.create_vhost_user_if(True,  # is a server?
                                           str(ifpath),  # unicode not allowed.
                                           False,  # Who knows what renumber is?
@@ -96,8 +96,10 @@ class VPPInterface(object):
                                           True,  # use custom MAC
                                           mac_to_bytes(mac)
                                           )
-
-        _check_retval(t)
+	# TODO(ijw) this retval has changed format so I've temporarily
+	# disabled it until I can work out what's going on
+	self.LOG.error(str(t))
+        #_check_retval(t[0])
 
         # The permission that qemu runs as (TODO(ijw): should be
         # configurable)
@@ -115,7 +117,8 @@ class VPPInterface(object):
 
     ########################################
 
-    def __init__(self):
+    def __init__(self, log):
+	self.LOG = log
         self.r = vpp_papi.connect("test_papi")
 
     def disconnect(self):

@@ -67,11 +67,11 @@ def get_vhostuser_name(uuid):
 
 class VPPForwarder(object):
 
-    def __init__(self, vlan_trunk_if=None,
+    def __init__(self, log, vlan_trunk_if=None,
                  vxlan_src_addr=None,
                  vxlan_bcast_addr=None,
                  vxlan_vrf=None):
-        self.vpp = vpp.VPPInterface()
+        self.vpp = vpp.VPPInterface(log)
 
         # This is the trunk interface for VLAN networking
         self.trunk_if = vlan_trunk_if
@@ -297,7 +297,8 @@ def main():
 
     cfg.CONF(sys.argv[1:])
     global vppf
-    vppf = VPPForwarder(vlan_trunk_if=cfg.CONF.ml2_vpp.vlan_trunk_if,
+    vppf = VPPForwarder(app.logger,
+			vlan_trunk_if=cfg.CONF.ml2_vpp.vlan_trunk_if,
                         vxlan_src_addr=cfg.CONF.ml2_vpp.vxlan_src_addr,
                         vxlan_bcast_addr=cfg.CONF.ml2_vpp.vxlan_bcast_addr,
                         vxlan_vrf=cfg.CONF.ml2_vpp.vxlan_vrf)
