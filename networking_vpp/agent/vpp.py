@@ -99,10 +99,9 @@ class VPPInterface(object):
                                           True,  # use custom MAC
                                           mac_to_bytes(mac)
                                           )
-        # TODO(ijw) this retval has changed format so I've temporarily
-        # disabled it until I can work out what's going on
-        self.LOG.error(str(t))
-        #_check_retval(t[0])
+
+        print("Created vhost user interface object: %s" % str(t))
+        _check_retval(t)
 
         # The permission that qemu runs as.
         self.LOG.info('Changing vhostuser interface file permission to %s:%s'
@@ -116,7 +115,8 @@ class VPPInterface(object):
         return t.sw_if_index
 
     def delete_vhostuser(self, idx):
-        LOG.debug("Deleting VPP interface - index: %s" % idx)
+        #LOG.debug("Deleting VPP interface - index: %s" % idx)
+        print("Deleting VPP interface - index: %s" % idx)
         t = vpp_papi.delete_vhost_user_if(idx)
 
         _check_retval(t)
