@@ -99,7 +99,8 @@ class VPPInterface(object):
                                           True,  # use custom MAC
                                           mac_to_bytes(mac)
                                           )
-        LOG.debug("Created vhost user interface object: %s" % str(t))
+        #LOG.debug("Created vhost user interface object: %s" % str(t))
+        print("Created vhost user interface object: %s" % str(t))
         _check_retval(t)
 
         # The permission that qemu runs as (TODO(ijw): should be
@@ -112,7 +113,8 @@ class VPPInterface(object):
         return t.sw_if_index
 
     def delete_vhostuser(self, idx):
-        LOG.debug("Deleting VPP interface - index: %s" % idx)
+        #LOG.debug("Deleting VPP interface - index: %s" % idx)
+        print("Deleting VPP interface - index: %s" % idx)
         t = vpp_papi.delete_vhost_user_if(idx)
 
         _check_retval(t)
