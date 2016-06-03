@@ -38,9 +38,12 @@ def _vpp_cb(*args, **kwargs):
 
 
 def _check_retval(t):
-    if t.retval != 0:
-        print ('FAIL? retval here is %s' % t.retval)
-#        raise Exception('failed in backend')
+    try:
+        if t.retval != 0:
+            print ('FAIL? retval here is %s' % t.retval)
+    #        raise Exception('failed in backend')
+    except AttributeError as e:
+        print("Error: %s" % e)
 
 
 # Sometimes a callback fires unexpectedly.  We need to catch them
