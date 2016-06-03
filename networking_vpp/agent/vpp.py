@@ -116,6 +116,7 @@ class VPPInterface(object):
         return t.sw_if_index
 
     def delete_vhostuser(self, idx):
+        LOG.debug("Deleting VPP interface - index: %s" % idx)
         t = vpp_papi.delete_vhost_user_if(idx)
 
         _check_retval(t)
