@@ -1,5 +1,7 @@
+==============
 networking-vpp
 ==============
+
 ML2 Mechanism driver and small control plane for OpenVPP forwarder
 
 This is a Neutron mechanism driver to bring the advantages of OpenVPP to
@@ -18,10 +20,11 @@ at the moment is small and easy to read, even if it makes you pull faces
 when you read it.
 
 Your questions answered
---------------------------
+~~~~~~~~~~~~~~~~~~~~~~~
 
 How do I use it?
-~~~~~~~~~~~~~~~~
+----------------
+
 There's a devstack plugin.  You can add this plugin to your local.conf and see it working.
 You'll want to get VPP and the VPP Python bindings set up on the host before you do that.
 I haven't written up the instructions yet but they're coming.
@@ -39,11 +42,13 @@ run devstack.  You'll also need to disable libvirt security for qemu, as libvirt
 play well with vhostuser sockets in its default setup.  CentOS testing is ongoing.
 
 What overlays does it support?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------------
+
 Today, it supports VLANs.
 
 How does it work?
-~~~~~~~~~~~~~~~~~
+-----------------
+
 VPP has one physical interface nominated as the trunk network (in Neutron
 terms, it supports one 'physical' network today, with a hardcoded name).  When
 a network is needed on a host, we create a subinterface with the selected
@@ -52,7 +57,8 @@ and then makes a new bridge domain in VPP and puts the VLAN into it.  Binding
 a port involves putting the port into the same bridge domain.
 
 How does it implement binding?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------------
+
 There are a number of calls that a mechanism driver can implement.  The
 precommit calls determine if a create, update or delete is acceptable and
 stop it before it hits the database; they can also update additional
@@ -73,7 +79,8 @@ forwarders in the system get appropriately programmed to put the traffic where
 Nova expects it.
 
 How does it talk to VPP?
-~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------
+
 This uses the Python module Ole Troan added to VPP to interface with the
 forwarder.  VPP has an admin channel, implemented as a couple of shared
 memory queues, to exchange control messages with VPP.  The Python bindings
@@ -85,12 +92,14 @@ and need root credentials to access, so the agent also runs as root.  It
 rather inelegantly coredumps if it doesn't have root privileges.
 
 What doesn't it support?
-~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------
+
 This list is much longer than what it does support at the moment.  For now,
 assume it moves packets to where they need to go and not very much else.
 
 What are you doing next?
-~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------
+
 This driver is a good ML2 citizen, and so it should support the non-L2 features
 that ML2 brings with it.  Right now, I'm working on integrating the DHCP,
 metadata and L3 agents with it - this means 'binding' TAP devices when a
@@ -100,7 +109,8 @@ but it's easy enough, and it means that we get a working system now and we can
 use VPP's internal features to enhance these elements in the future.
 
 What else needs fixing?
-~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------
+
 There are a long list of items where you can help.  At the moment, the
 reliability of the messaging is one area where there's a chunk of work to do
 (see below); that aside, you could attempt to get VXLAN working, or you could
@@ -127,7 +137,8 @@ something I wanted to put off for later I've generally tried to mark that
 in place.
 
 Why didn't you use the ML2 agent framework for this driver?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------------------------------------
+
 Neutron's agent framework is based on communicating via RabbitMQ.  This can
 lead to issues of scale when there are more than a few compute hosts involved,
 and RabbitMQ is not as robust as it could be, plus RabbitMQ is trying to be a
@@ -140,14 +151,14 @@ framework is /not/ intended to be a permanent solution; for now, though, it gets
 messages where they need to go when the system is running happily.  In the longer
 term, it needs to address a few points:
 
- - Neutron servers can restart
- - There can be multiple Neutron-server processes (for redundancy and scale-out)
+ * Neutron servers can restart
+ * There can be multiple Neutron-server processes (for redundancy and scale-out)
    and the system needs to know what to do when several copies are running
- - VPP agents and VPP processes can also restart, and they need to quickly
+ * VPP agents and VPP processes can also restart, and they need to quickly
    remember what they're doing - ideally without leaking firewalled packets in
    the meantime - and realising that the work they were doing as they restarted
    may not have completed
- - when you're working with many many forwarders you need the backend to be
+ * when you're working with many many forwarders you need the backend to be
    asynchronous; all the REST calls to agents (or whatever replaces them)
    should be converted to something where you don't hold up all the rest of
    the work just while you wait for a reply.
@@ -168,12 +179,14 @@ getting VPP to drop the privs on the shared memory and by using e.g. a setgid
 directory to talk to VPP, respectively).
 
 Why did you use a broadcast mechanism for getting the data to the forwarders?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-----------------------------------------------------------------------------
+
 Pure laziness.  It's the easiest thing to implement and since I'm actually on
 single-host devstack for my testing there's actually no penalty for calling out
 to each forwarder.
 
 Why do I have to list the agents on my compute nodes in config?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------------------------------------------
+
 Auto-discovery is needed; it's just faster to get something out of the door without
 it.
