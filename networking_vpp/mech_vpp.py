@@ -212,8 +212,8 @@ class VPPMechanismDriver(api.MechanismDriver):
                current_bind.get(api.BOUND_DRIVER) == self.MECH_NAME):
                 # then send the bind out (may equally be an update on a bound
                 # port)
-                LOG.debug("Sending bind request to agent for port %(port)"
-                          "segment %(segment), host %(host), type %(bind_type)",
+                LOG.debug("Sending bind request to agent for port %(port)s"
+                          "segment %(segment)s, host %(host)s, type %(bind_type)s",
                           {
                           'port': port_context.current,
                           'segment': current_bind[api.BOUND_SEGMENT],
@@ -228,8 +228,8 @@ class VPPMechanismDriver(api.MechanismDriver):
             elif (prev_bind is not None and
                   prev_bind.get(api.BOUND_DRIVER) == self.MECH_NAME):
                 # If we were the last binder of this port but are no longer
-                LOG.debug("Sending unbind request to agent for port %(port)"
-                          "on host %(host)",
+                LOG.debug("Sending unbind request to agent for port %(port)s"
+                          "on host %(host)s",
                           {
                           'port': port_context.current,
                           'host': port_context.original_host,
