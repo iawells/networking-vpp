@@ -287,6 +287,7 @@ class AgentCommunicator(object):
         """
 
         self.queue.put(['unbind', port, host])
+        self.send_unbind(port, host)
 
     def send_bind(self, port, segment, host, type):
         data = {
