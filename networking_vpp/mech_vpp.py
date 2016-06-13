@@ -309,7 +309,7 @@ class AgentCommunicator(object):
             'segmentation_id': segment[api.SEGMENTATION_ID],
             'bind_type': type
         }
-        self._unicast_msg('ports/%s/bind' % port['id'], data, host)
+        self._unicast_msg('ports/%s/bind' % port['id'], data)
 
         # This should only be sent when we're certain that the port
         # is bound If this is in a bg thread, it should be sent there,
@@ -343,12 +343,11 @@ class AgentCommunicator(object):
 
     def send_unbind(self, port, host):
         data = {}
-        self._unicast_msg('ports/%s/unbind/%s' % (port['id'], host),
-                            data, host)
+        self._unicast_msg('ports/%s/unbind/%s' % (port['id'], host), data)
 
-    def _unicast_msg(self, urlfrag, msg, host):
+    def _unicast_msg(self, urlfrag, msg):
         # Send unicast message to the agent running on the host
         for url in self.agents:
-            if host in url:
+            if msg['host'] in url:
                 LOG.debug("ML2_VPP: Sending message:%s to agent at:%s on host:%s" % (msg, url + urlfrag, host))
                 requests.put(url + urlfrag, data=msg)
