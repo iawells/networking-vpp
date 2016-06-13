@@ -335,5 +335,5 @@ class AgentCommunicator(object):
         # Send unicast message to the agent running on the host
         for url in self.agents:
             if msg['host'] in url:
-                LOG.debug("ML2_VPP: Sending message:%s to agent at:%s on host:%s" % (msg, url + urlfrag, host))
+                LOG.debug("ML2_VPP: Sending message:%s to agent at:%s on host:%s" % (msg, url + urlfrag, msg['host']))
                 requests.put(url + urlfrag, data=msg)
