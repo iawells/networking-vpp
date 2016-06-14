@@ -193,7 +193,7 @@ class VPPForwarder(object):
     # end theft
     ########################################
 
-    def create_interface_on_host(self, type, uuid, mac):
+    def create_interface_on_host(self, if_type, uuid, mac):
         if uuid in self.interfaces:
             app.logger.debug('port %s repeat binding request - ignored',
                              uuid)
