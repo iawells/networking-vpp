@@ -194,39 +194,53 @@ class VPPForwarder(object):
     ########################################
 
     def create_interface_on_host(self, type, uuid, mac):
-        if uuid not in self.interfaces:
-            app.logger.debug('bind port - not in list %s',
-                             ', '.join(self.interfaces.keys()))
+        if uuid in self.interfaces:
+            app.logger.debug('port %s repeat binding request - ignored',
+                             uuid)
+        else:
+            app.logger.debug('binding port %s as type %s',
+                             (uuid, if_type))
 
             # TODO(ijw): naming not obviously consistent with
             # Neutron's naming
             name = uuid[0:11]
             bridge_name = 'br-' + name
-            tap_name = 'tap-' + name
+            tap_name = 'tap' + name
 
-            if type == 'maketap' or type == 'plugtap':
-                iface = self.vpp.create_tap(tap_name, mac)
-                if type == 'maketap':
-                    props = {'vif_type': 'maketap', 'name': tap_name}
+            if if_type == 'maketap' or if_type == 'plugtap':
+                if if_type == 'maketap':
+                    iface = self.vpp.create_tap(tap_name, mac)
+                    props = {'bind_type': 'maketap', 'name': tap_name}
                 else:
-                    self.ensure_bridge(bridge_name)
-                    props = {'vif_type': 'plugtap', 'name': bridge_name}
+                    int_tap_name = 'vpp' + name
+
+                    props = {'bind_type': 'plugtap',
+                             'bridge_name': bridge_name,
+                             'ext_tap_name': tap_name,
+                             'int_tap_name': int_tap_name
+                    }
+
+                    iface = self.vpp.create_tap(int_tap_name, mac)
 
                     # TODO(ijw): someone somewhere ought to be sorting
                     # the MTUs out
-                    bridge_lib.BridgeDevice(bridge_name).addif(tap_name)
 
-            elif type == 'vhostuser':
+                    br = self.ensure_bridge(bridge_name)
+                    # This is the external TAP device that has already been precreated
+                    br.addif(tap_name)
+                    # This is the device that we just created with VPP
+                    br.addif(int_tap_name)
+
+            elif if_type == 'vhostuser':
                 path = get_vhostuser_name(uuid)
                 iface = self.vpp.create_vhostuser(path, mac)
-                props = {'vif_type': 'vhostuser', 'path': uuid}
+                props = {'bind_type': 'vhostuser', 'path': uuid}
             else:
                 raise Exception('unsupported interface type')
 
             self.interfaces[uuid] = (iface, props)
-        else:
-            app.logger.debug('skipping a repeated bind')
         return self.interfaces[uuid]
+
 
     def bind_interface_on_host(self, if_type, uuid, mac, net_type, seg_id):
         net_br_idx = self.network_on_host(net_type, seg_id)
@@ -238,9 +252,41 @@ class VPPForwarder(object):
         return props
 
     def unbind_interface_on_host(self, uuid):
-        app.logger.debug('TODO(ijw) unbind port %s', uuid)
+        if uuid not in self.interfaces:
+            app.logger.debug('unknown port %s unbinding request - ignored',
+                             uuid)
+        else:
 
-        pass
+            iface_idx, props = self.interfaces[uuid]
+
+            app.logger.debug('unbinding port %s, recorded as type %s',
+                             (uuid, props['bind_type']))
+
+            # We no longer need this interface.  Specifically if it's
+            # a vhostuser interface it's annoying to have it around
+            # because the VM's memory (hugepages) will not be
+            # released.  So, here, we destroy it.
+
+            # TODO(ijw): I'm assuming deleting an interface in a
+            # bridge domain works...
+            if props['bind_type'] == 'vhostuser':
+                self.vpp.delete_vhostuser(iface_idx)
+            elif props['bind_type'] in ['maketap', 'plugtap']:
+                self.vpp.delete_tap(iface_idx)
+                if props['bind_type'] == 'plugtap':
+                    bridge = bridge_lib.BridgeDevice(bridge_name)
+                    if bridge_device.exists():
+                        # These may fail, don't care much
+                        try:
+                            bridge.delif(props['int_tap_name'])
+                            bridge.delif(props['ext_tap_name'])
+                            bridge.delbr(props['bridge_name'])
+                        except:
+                            pass
+            else:
+                app.logger.error('Unknown port type %s during unbind'
+                                 % props['bind_type'])
+
 
 
 ######################################################################
