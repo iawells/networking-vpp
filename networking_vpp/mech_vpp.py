@@ -337,22 +337,20 @@ class AgentCommunicator(object):
         plugin = manager.NeutronManager.get_plugin()
         # Bodge
         if self.recursive:
-<<<<<<< 27f73f99c9a745c65e4184b8bcfd8697eca7e35b
             # This happens right now because when we update the port
             # status, we update the port and the update notification
             # comes through to here.
             # TODO(ijw) wants a more permanent fix, because this only
             # happens due to the threading model.  We should be
             # spotting relevant changes in postcommit.
-            LOG.warning('Your recursion check hit on activating port')
-=======
             LOG.warning('ML2_VPP: Your recursion check hit on activating port')
->>>>>>> add mech_vpp debugs
         else:
             self.recursive = True
             plugin.update_port_status(context, port['id'],
                                       n_const.PORT_STATUS_ACTIVE,
                                       host=host)
+            ##TODO(njoy) Implement an RPC call with request response to confirm that binding/unbinding has
+            ##been successful at the agent
             self.recursive = False
 
     def send_unbind(self, port, host):
@@ -362,6 +360,7 @@ class AgentCommunicator(object):
     def _unicast_msg(self, urlfrag, msg):
         # Send unicast message to the agent running on the host
         host_ip = socket.gethostbyname(msg['host'])
+        LOG.debug("ML2_VPP: Messaging host at IP Address: %s" % host_ip)
         for url in self.agents:
             if host_ip in url:
                 LOG.debug("ML2_VPP: Sending message:%s to agent at:%s on host:%s" % (msg, url+urlfrag, host_ip))
