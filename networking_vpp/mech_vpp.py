@@ -354,7 +354,7 @@ class AgentCommunicator(object):
             self.recursive = False
 
     def send_unbind(self, port, host):
-        data = {}
+        data = {'host': host}
         urlfrag = "ports/%s/unbind" % port['id']
         LOG.debug("ML2_VPP: unbind urlfrag %s" % urlfrag)
         self._unicast_msg(urlfrag, data)
