@@ -345,7 +345,9 @@ class AgentCommunicator(object):
 
     def send_unbind(self, port, host):
         data = {}
-        self._unicast_msg('ports/%s/unbind/%s' % (port['id'], host), data)
+        urlfrag = "ports/%s/unbind" % port['id']
+        LOG.debug("ML2_VPP: unbind urlfrag %s" % urlfrag)
+        self._unicast_msg(urlfrag, data)
 
     def _unicast_msg(self, urlfrag, msg):
         # Send unicast message to the agent running on the host
