@@ -195,11 +195,9 @@ class VPPForwarder(object):
 
     def create_interface_on_host(self, if_type, uuid, mac):
         if uuid in self.interfaces:
-            app.logger.debug('port %s repeat binding request - ignored',
-                             uuid)
+            app.logger.debug('port %s repeat binding request - ignored' % uuid)
         else:
-            app.logger.debug('binding port %s as type %s',
-                             (uuid, if_type))
+            app.logger.debug('binding port %s as type %s' % (uuid, if_type))
 
             # TODO(ijw): naming not obviously consistent with
             # Neutron's naming
@@ -282,8 +280,7 @@ class VPPForwarder(object):
                         except:
                             pass
             else:
-                app.logger.error('Unknown port type %s during unbind'
-                                 % props['bind_type'])
+                app.logger.error('Unknown port type %s during unbind' % props['bind_type'])
 
 
 
