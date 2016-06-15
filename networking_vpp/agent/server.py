@@ -362,7 +362,7 @@ class PortUnbind(Resource):
     def __init(self, *args, **kwargs):
         super('PortUnBind', self).__init__(*args, **kwargs)
 
-    def put(self, id, host):
+    def put(self, id):
         id=str(id)  # comes in as unicode
         
         global vppf
@@ -412,7 +412,7 @@ def main():
     api = Api(app)
 
     api.add_resource(PortBind, '/ports/<id>/bind')
-    api.add_resource(PortUnbind, '/ports/<id>/unbind/<host>')
+    api.add_resource(PortUnbind, '/ports/<id>/unbind')
 
 
     app.run(host='0.0.0.0',port=2704)
