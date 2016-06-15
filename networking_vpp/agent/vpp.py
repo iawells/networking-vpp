@@ -87,7 +87,7 @@ class VPPInterface(object):
 
     #############################
 
-    def create_vhostuser(self, ifpath, mac):
+    def create_vhostuser(self, ifpath, mac, qemu_user, qemu_group):
         self.LOG.info('Creating %s as a port' % ifpath)
         t = vpp_papi.create_vhost_user_if(True,  # is a server?
                                           str(ifpath),  # unicode not allowed.
@@ -96,15 +96,16 @@ class VPPInterface(object):
                                           True,  # use custom MAC
                                           mac_to_bytes(mac)
                                           )
-	# TODO(ijw) this retval has changed format so I've temporarily
-	# disabled it until I can work out what's going on
-	self.LOG.error(str(t))
+        # TODO(ijw) this retval has changed format so I've temporarily
+        # disabled it until I can work out what's going on
+        self.LOG.error(str(t))
         #_check_retval(t[0])
 
-        # The permission that qemu runs as (TODO(ijw): should be
-        # configurable)
-        uid = pwd.getpwnam("libvirt-qemu").pw_uid
-        gid = grp.getgrnam("kvm").gr_gid
+        # The permission that qemu runs as.
+        self.LOG.info('Changing vhostuser interface file permission to %s:%s'
+                      % (qemu_user, qemu_group))
+        uid = pwd.getpwnam(qemu_user).pw_uid
+        gid = grp.getgrnam(qemu_group).gr_gid
         os.chown(ifpath, uid, gid)
         os.chmod(ifpath, 0o770)
 
@@ -118,7 +119,7 @@ class VPPInterface(object):
     ########################################
 
     def __init__(self, log):
-	self.LOG = log
+        self.LOG = log
         self.r = vpp_papi.connect("test_papi")
 
     def disconnect(self):

@@ -32,6 +32,7 @@ from flask_restful import Api
 from flask_restful import reqparse
 from flask_restful import Resource
 import os
+import distro
 import sys
 import vpp
 
@@ -62,6 +63,31 @@ VHOSTUSER_DIR = '/tmp'
 def get_vhostuser_name(uuid):
     return os.path.join(VHOSTUSER_DIR, uuid)
 
+
+def get_distro_family():
+    if distro.id() in ['rhel', 'centos', 'fedora']:
+        return 'redhat'
+    else:
+        return distro.id()
+
+
+def get_qemu_default():
+    distro = get_distro_family()
+    if distro == 'redhat':
+        qemu_user = 'qemu'
+        qemu_group = 'qemu'
+    elif distro == 'ubuntu':
+        qemu_user = 'libvirt-qemu'
+        qemu_group = 'kvm'
+    else:
+        # let's just try libvirt-qemu for now, maybe we should instead
+        # print error messsage and exit?
+        qemu_user = 'libvirt-qemu'
+        qemu_group = 'kvm'
+
+    return (qemu_user, qemu_group)
+
+
 ######################################################################
 
 
@@ -70,8 +96,13 @@ class VPPForwarder(object):
     def __init__(self, log, vlan_trunk_if=None,
                  vxlan_src_addr=None,
                  vxlan_bcast_addr=None,
-                 vxlan_vrf=None):
+                 vxlan_vrf=None,
+                 qemu_user=None,
+                 qemu_group=None):
         self.vpp = vpp.VPPInterface(log)
+
+        self.qemu_user = qemu_user
+        self.qemu_group = qemu_group
 
         # This is the trunk interface for VLAN networking
         self.trunk_if = vlan_trunk_if
@@ -107,8 +138,8 @@ class VPPForwarder(object):
                 self.vpp.delete_vhostuser(f.sw_if_index)
 
             trunk_ifstruct = self.vpp.get_interface(self.trunk_if)
-	    if trunk_ifstruct is None:
-		raise Exception("Could not find interface %s" % self.trunk_if)
+            if trunk_ifstruct is None:
+                raise Exception("Could not find interface %s" % self.trunk_if)
             self.trunk_ifidx = trunk_ifstruct.sw_if_index
 
             # This interface is not automatically up just because
@@ -203,7 +234,7 @@ class VPPForwarder(object):
             app.logger.debug('port %s repeat binding request - ignored',
                              uuid)
         else:
-            app.logger.debug('binding port %s as type %s',
+            app.logger.debug('binding port %s as type %s' %
                              (uuid, if_type))
 
             # TODO(ijw): naming not obviously consistent with
@@ -238,7 +269,8 @@ class VPPForwarder(object):
 
             elif if_type == 'vhostuser':
                 path = get_vhostuser_name(uuid)
-                iface = self.vpp.create_vhostuser(path, mac)
+                iface = self.vpp.create_vhostuser(path, mac, self.qemu_user,
+                                                  self.qemu_group)
                 props = {'bind_type': 'vhostuser', 'path': uuid}
             else:
                 raise Exception('unsupported interface type')
@@ -258,14 +290,14 @@ class VPPForwarder(object):
 
     def unbind_interface_on_host(self, uuid):
         if uuid not in self.interfaces:
-            app.logger.debug('unknown port %s unbinding request - ignored',
-                             uuid)
+            app.logger.debug('unknown port %s unbinding request - ignored'
+                             % uuid)
         else:
 
             iface_idx, props = self.interfaces[uuid]
 
-            app.logger.debug('unbinding port %s, recorded as type %s',
-                             (uuid, props['bind_type']))
+            app.logger.debug('unbinding port %s, recorded as type %s'
+                             % (uuid, props['bind_type']))
 
             # We no longer need this interface.  Specifically if it's
             # a vhostuser interface it's annoying to have it around
@@ -354,12 +386,26 @@ def main():
     # TODO(ijw) port etc. should probably be configurable.
 
     cfg.CONF(sys.argv[1:])
+
+    # If the user and/or group are specified in config file, we will use
+    # them as configured; otherwise we try to use defaults depending on
+    # distribution. Currently only supporting ubuntu and redhat.
+    qemu_user = cfg.CONF.ml2_vpp.qemu_user
+    qemu_group = cfg.CONF.ml2_vpp.qemu_group
+    default_user, default_group = get_qemu_default()
+    if not qemu_user:
+        qemu_user = default_user
+    if not qemu_group:
+        qemu_group = default_group
+
     global vppf
     vppf = VPPForwarder(app.logger,
-			vlan_trunk_if=cfg.CONF.ml2_vpp.vlan_trunk_if,
+                        vlan_trunk_if=cfg.CONF.ml2_vpp.vlan_trunk_if,
                         vxlan_src_addr=cfg.CONF.ml2_vpp.vxlan_src_addr,
                         vxlan_bcast_addr=cfg.CONF.ml2_vpp.vxlan_bcast_addr,
-                        vxlan_vrf=cfg.CONF.ml2_vpp.vxlan_vrf)
+                        vxlan_vrf=cfg.CONF.ml2_vpp.vxlan_vrf,
+                        qemu_user=qemu_user,
+                        qemu_group=qemu_group)
 
 
 
