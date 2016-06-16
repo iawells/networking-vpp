@@ -318,7 +318,7 @@ class AgentCommunicator(object):
             'mac_address': port['mac_address'],
             'mtu': 1500,  # not this, but what?: port['mtu'],
             'network_type': segment['network_type'],
-            'segmentation_id': segment['segmentation_id'], 
+            'segmentation_id': segment['segmentation_id'] if segment['segmentation_id'] is not None else 0, 
             'binding_type': type
         }
         self._unicast_msg('ports/%s/bind' % port['id'], data)
