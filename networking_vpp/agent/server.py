@@ -93,7 +93,6 @@ def get_qemu_default():
 
 class VPPForwarder(object):
 
-<<<<<<< 14a47b98ebeaeebbadcd49af3bb502031998ebe8
     def __init__(self, log,
                  flat_network_if=None, 
                  vlan_trunk_if=None,
@@ -412,11 +411,8 @@ def main():
         qemu_group = default_group
 
     global vppf
-<<<<<<< 14a47b98ebeaeebbadcd49af3bb502031998ebe8
     vppf = VPPForwarder(app.logger,
-=======
-    vppf = VPPForwarder(flat_network_if=cfg.CONF.ml2_vpp.flat_network_if,
->>>>>>> add flat networking
+                        flat_network_if=cfg.CONF.ml2_vpp.flat_network_if,
                         vlan_trunk_if=cfg.CONF.ml2_vpp.vlan_trunk_if,
                         vxlan_src_addr=cfg.CONF.ml2_vpp.vxlan_src_addr,
                         vxlan_bcast_addr=cfg.CONF.ml2_vpp.vxlan_bcast_addr,
