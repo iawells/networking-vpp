@@ -93,7 +93,10 @@ def get_qemu_default():
 
 class VPPForwarder(object):
 
-    def __init__(self, log, vlan_trunk_if=None,
+<<<<<<< 14a47b98ebeaeebbadcd49af3bb502031998ebe8
+    def __init__(self, log,
+                 flat_network_if=None, 
+                 vlan_trunk_if=None,
                  vxlan_src_addr=None,
                  vxlan_bcast_addr=None,
                  vxlan_vrf=None,
@@ -103,6 +106,13 @@ class VPPForwarder(object):
 
         self.qemu_user = qemu_user
         self.qemu_group = qemu_group
+
+        # TODO(ijw): these should actually be physical networks;
+        # named and indexed by name.  There's no distinction between
+        # 'flat' and 'trunk' interfaces, only the provider networks on top.
+
+        # This is the flat network interface for providing FLAT networking
+        self.flat_if = flat_network_if
 
         # This is the trunk interface for VLAN networking
         self.trunk_if = vlan_trunk_if
@@ -123,13 +133,7 @@ class VPPForwarder(object):
         for (ifname, f) in self.vpp.get_interfaces():
             # Clean up interfaces from previous runs
 
-            # TODO(ijw) should not delete interfaces that are in
-            # 'interfaces' or bridges related to 'networks'
-
-            # TODO(ijw) can't easily spot VLAN subifs to delete, so we
-            # don't right now.  Shouldn't be a problem, it just means
-            # the network remains around when the last VM has gone.
-
+            # TODO(ijw) can't easily SPOT VLAN subifs to delete
             if ifname.startswith('tap-'):
                 # all VPP tap interfaces are of this form
                 self.vpp.delete_tap(f.sw_if_index)
@@ -137,11 +141,14 @@ class VPPForwarder(object):
                 # all VPP vhostuser interfaces are of this form
                 self.vpp.delete_vhostuser(f.sw_if_index)
 
-            trunk_ifstruct = self.vpp.get_interface(self.trunk_if)
-            if trunk_ifstruct is None:
-                raise Exception("Could not find interface %s" % self.trunk_if)
-            self.trunk_ifidx = trunk_ifstruct.sw_if_index
+        trunk_ifstruct = self.vpp.get_interface(self.trunk_if) if self.trunk_if else None
+        flat_ifstruct = self.vpp.get_interface(self.flat_if) if self.flat_if else None
 
+	if trunk_ifstruct is None and flat_ifstruct is None:
+	    raise Exception("Could not find a VPP uplink interface:%s-%s" % (self.trunk_if, self.flat_if))
+
+        if trunk_ifstruct is not None:
+            self.trunk_ifidx = trunk_ifstruct.sw_if_index
             # This interface is not automatically up just because
             # we've started and we need to ensure it is before
             # proceeding.
@@ -150,6 +157,10 @@ class VPPForwarder(object):
             # want to check the local VPP config and bring it up when
             # confirmed.
             self.vpp.ifup(self.trunk_ifidx)
+
+        if flat_ifstruct is not None:
+            self.flat_ifidx = flat_ifstruct.sw_if_index
+            self.vpp.ifup(self.flat_ifidx)
             
     # This, here, is us creating a VLAN backed network
     def network_on_host(self, type, seg_id):
@@ -157,13 +168,17 @@ class VPPForwarder(object):
             # TODO(ijw): bridge domains have no distinguishing marks.
             # VPP needs to allow us to name or label them so that we
             # can find them when we restart
-
-            if type == 'vlan':
+            if type == 'flat':
+                if_upstream = self.flat_ifidx
+                app.logger.debug('Adding upstream interface:%s to bridge for flat networking' % self.flat_if)
+            elif type == 'vlan':
                 # TODO(ijw): this VLAN subinterface may already exist, and
                 # may even be in another bridge domain already (see
                 # above).
                 if_upstream = self.vpp.create_vlan_subif(self.trunk_ifidx,
                                                          seg_id)
+                app.logger.debug('Adding upstream trunk interface:%s.%s \
+                to bridge for vlan networking' % (self.trunk_if,seg_id))
             elif type == 'vxlan':
                 if_upstream = \
                     self.vpp.create_srcrep_vxlan_subif(self, self.vxlan_vrf,
@@ -397,7 +412,11 @@ def main():
         qemu_group = default_group
 
     global vppf
+<<<<<<< 14a47b98ebeaeebbadcd49af3bb502031998ebe8
     vppf = VPPForwarder(app.logger,
+=======
+    vppf = VPPForwarder(flat_network_if=cfg.CONF.ml2_vpp.flat_network_if,
+>>>>>>> add flat networking
                         vlan_trunk_if=cfg.CONF.ml2_vpp.vlan_trunk_if,
                         vxlan_src_addr=cfg.CONF.ml2_vpp.vxlan_src_addr,
                         vxlan_bcast_addr=cfg.CONF.ml2_vpp.vxlan_bcast_addr,
