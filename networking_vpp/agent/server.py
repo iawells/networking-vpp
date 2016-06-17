@@ -79,7 +79,7 @@ def get_qemu_default():
         qemu_group = 'qemu'
     elif distro == 'ubuntu':
         qemu_user = 'libvirt-qemu'
-        qemu_group = 'kvm'
+        qemu_group = 'libvirtd'
     else:
         # let's just try libvirt-qemu for now, maybe we should instead
         # print error messsage and exit?
