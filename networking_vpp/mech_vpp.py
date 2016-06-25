@@ -359,5 +359,5 @@ class AgentCommunicator(object):
                 LOG.debug("ML2_VPP: Sending message:%s to agent at:%s on host:%s" % (msg, url+urlfrag, host_ip))
                 requests.put(url + urlfrag, data=msg)
             else:
-                LOG.warn("ML2_VPP: Messaging to agent failed.. because the\
-                    hostIP:%s is not found in the configured agent URLs" % host_ip)
+                LOG.warn("ML2_VPP: Messaging to agent failed.. because the hostIP:%s",
+                         "is not found in the configured agent URLs" % host_ip)
