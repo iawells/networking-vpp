@@ -372,7 +372,7 @@ def main():
     api.add_resource(PortBind, '/ports/<id>/bind')
     api.add_resource(PortUnbind, '/ports/<id>/unbind')
 
-
+    LOG.debug("Starting app on host addresses: 0.0.0.0 and port 2704")
     app.run(host='0.0.0.0',port=2704)
 
 if __name__ == '__main__':
