@@ -195,6 +195,7 @@ class VPPForwarder(object):
                 return
         else:
             bridge_device = bridge_lib.BridgeDevice(bridge_name)
+        return bridge_device
 
         # TODO(ijw): should be checking this all succeeded
 
@@ -345,19 +346,15 @@ class PortUnbind(Resource):
         vppf.unbind_interface_on_host(id)
 
 
-LOG = logging.getLogger('vpp-agent')
+
 
 # Basic Flask RESTful app setup
 app = Flask('vpp-agent')
 
 def main():
     app.debug = True
-
-#    logger = logging.getLogger('werkzeug')
-#    logger.setLevel(logging.INFO)
-
-    # Basic log config
-    app.logger.debug('Debug logging enabled')
+    LOG = logging.getLogger('vpp-agent')
+    LOG.debug('Debug logging enabled')
     # TODO(ijw) port etc. should probably be configurable.
 
     cfg.CONF(sys.argv[1:])
