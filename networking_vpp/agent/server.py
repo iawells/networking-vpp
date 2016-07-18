@@ -354,7 +354,8 @@ app = Flask('vpp-agent')
 def main():
     app.debug = True
     LOG = logging.getLogger('vpp-agent')
-    LOG.debug('Debug logging enabled')
+    #LOG.debug('Debug logging enabled')
+    app.logger.debug('Debug logging enabled')
     # TODO(ijw) port etc. should probably be configurable.
 
     cfg.CONF(sys.argv[1:])
