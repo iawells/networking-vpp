@@ -225,6 +225,7 @@ class VPPForwarder(object):
                              'ext_tap_name': tap_name,
                              'int_tap_name': int_tap_name
                     }
+                    app.logger.debug('Creating tap interface %s with mac %s' % (int_tap_name, mac))
 
                     iface = self.vpp.create_tap(int_tap_name, mac)
 
