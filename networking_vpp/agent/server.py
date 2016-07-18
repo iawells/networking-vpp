@@ -342,7 +342,6 @@ class PortUnbind(Resource):
 
     def put(self, id):
         global vppf
-
         vppf.unbind_interface_on_host(id)
 
 
@@ -350,14 +349,13 @@ class PortUnbind(Resource):
 
 # Basic Flask RESTful app setup
 app = Flask('vpp-agent')
+LOG = logging.getLogger('vpp-agent')
 
 def main():
     app.debug = True
-    LOG = logging.getLogger('vpp-agent')
-    #LOG.debug('Debug logging enabled')
-    app.logger.debug('Debug logging enabled')
+    LOG.debug('Debug logging enabled')
+    #app.logger.debug('Debug logging enabled')
     # TODO(ijw) port etc. should probably be configurable.
-
     cfg.CONF(sys.argv[1:])
     global vppf
     vppf = VPPForwarder(flat_network_if=cfg.CONF.ml2_vpp.flat_network_if,
@@ -365,15 +363,11 @@ def main():
                         vxlan_src_addr=cfg.CONF.ml2_vpp.vxlan_src_addr,
                         vxlan_bcast_addr=cfg.CONF.ml2_vpp.vxlan_bcast_addr,
                         vxlan_vrf=cfg.CONF.ml2_vpp.vxlan_vrf)
-
-
-
     api = Api(app)
-
     api.add_resource(PortBind, '/ports/<id>/bind')
     api.add_resource(PortUnbind, '/ports/<id>/unbind')
 
-    LOG.debug("Starting app on host addresses: 0.0.0.0 and port 2704")
+    LOG.debug("Starting VPP agent on host address: 0.0.0.0 and port 2704")
     app.run(host='0.0.0.0',port=2704)
 
 if __name__ == '__main__':
