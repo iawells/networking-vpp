@@ -202,6 +202,8 @@ class VPPForwarder(object):
 
     # end theft
     ########################################
+
+    ##TODO(njoy): make wait_time configurable
     def wait_for_tap(self, device_name):
         """Wait for the external tap device to be created by the DHCP agent"""
         wait_time = 180
