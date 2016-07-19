@@ -42,6 +42,7 @@ from oslo_config import cfg
 #from oslo_log import log as logging
 import logging
 import time
+from threading import Thread
 
 ######################################################################
 
@@ -204,20 +205,27 @@ class VPPForwarder(object):
     ########################################
 
     ##TODO(njoy): make wait_time configurable
-    def wait_for_tap(self, device_name):
-        """Wait for the external tap device to be created by the DHCP agent"""
+    def add_external_tap(self, device_name, bridge, bridge_name):
+        """
+        Wait for the external tap device to be created by the DHCP agent.
+        When the tap device is ready, add it to bridge
+        Run as a thread so REST call can return before this code completes its execution
+        """
         wait_time = 180
         found = False 
         while wait_time > 0:
             if ip_lib.device_exists(device_name):
                 app.logger.debug('External tap device %s found!' % device_name)
+                app.logger.debug('Bridging tap interface %s on %s' % (device_name, bridge_name))
+                bridge.addif(device_name)
                 found = True
                 break
             else:
                 app.logger.debug('Waiting for external tap device %s to be created' % device_name)
-                time.sleep(5)
-                wait_time = wait_time - 5
-        return found
+                time.sleep(2)
+                wait_time -= 2
+        if not found:
+            app.logger.error('Failed waiting for external tap device %s' % device_name)
 
     
     def create_interface_on_host(self, if_type, uuid, mac):
@@ -250,12 +258,9 @@ class VPPForwarder(object):
                     # TODO(ijw): someone somewhere ought to be sorting
                     # the MTUs out
                     br = self.ensure_bridge(bridge_name)
-                    # This is the external TAP device that will be created by an agent, say the DHCP agent
-                    if self.wait_for_tap(tap_name):
-                        app.logger.debug('Adding tap interface %s to bridge %s' % (tap_name, bridge_name))
-                        br.addif(tap_name)
-                    else:
-                        app.logger.error('Could not find the external tap interface %s to bridge' % tap_name)
+                    # This is the external TAP device that will be created by an agent, say the DHCP agent later in time
+                    t = Thread(target=self.add_external_tap, args=(tap_name, br, bridge_name,))
+                    t.start()
                     # This is the device that we just created with VPP
                     br.addif(int_tap_name)
 
