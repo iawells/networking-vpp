@@ -354,7 +354,7 @@ app = Flask('vpp-agent')
 def main():
     app.debug = True
     LOG = logging.getLogger('vpp-agent')
-    ch = LOG.StreamHandler()
+    ch = logging.handlers.StreamHandler()
     formatter = logging.Formatter( '%(asctime)s - %(name)s - %(message)s')
     ch.setFormatter(formatter)
     app.logger.addHandler(ch)
