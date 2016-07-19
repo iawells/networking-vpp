@@ -211,7 +211,7 @@ class VPPForwarder(object):
         When the tap device is ready, add it to bridge
         Run as a thread so REST call can return before this code completes its execution
         """
-        wait_time = 180
+        wait_time = 60
         found = False 
         while wait_time > 0:
             if ip_lib.device_exists(device_name):
