@@ -354,6 +354,11 @@ app = Flask('vpp-agent')
 def main():
     app.debug = True
     LOG = logging.getLogger('vpp-agent')
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter( '%(asctime)s - %(name)s - %(message)s')
+    ch.setFormatter(formatter)
+    app.logger.addHandler(ch)
+
     app.logger.debug('Debug logging enabled')
     # TODO(ijw) port etc. should probably be configurable.
     cfg.CONF(sys.argv[1:])
@@ -367,8 +372,8 @@ def main():
     api.add_resource(PortBind, '/ports/<id>/bind')
     api.add_resource(PortUnbind, '/ports/<id>/unbind')
 
-    LOG.debug("Starting VPP agent on host address: 0.0.0.0 and port 2704")
     app.run(host='0.0.0.0',port=2704)
+    LOG.debug("Started VPP agent on host address: 0.0.0.0 and port 2704")
 
 if __name__ == '__main__':
 
