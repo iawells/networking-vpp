@@ -204,17 +204,17 @@ class VPPForwarder(object):
     ########################################
     def wait_for_tap(self, device_name):
         """Wait for the external tap device to be created by the DHCP agent"""
-        wait_time = 15
+        wait_time = 180
         found = False 
         while wait_time > 0:
             if ip_lib.device_exists(device_name):
-                app.logger.debug("External tap device %s has been created" % device_name)
+                app.logger.debug('External tap device %s found!' % device_name)
                 found = True
                 break
             else:
-                app.logger.debug("Waiting for external tap device %s to be created")
-                time.sleep(1)
-                wait_time = wait_time - 1
+                app.logger.debug('Waiting for external tap device %s to be created' % device_name)
+                time.sleep(5)
+                wait_time = wait_time - 5
         return found
 
     
