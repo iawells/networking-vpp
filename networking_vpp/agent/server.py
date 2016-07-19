@@ -34,7 +34,6 @@ from flask_restful import Resource
 import os
 import sys
 import vpp
-
 from neutron.agent.linux import bridge_lib
 from neutron.agent.linux import ip_lib
 from neutron.common import constants as n_const
@@ -42,6 +41,7 @@ from networking_vpp import config_opts
 from oslo_config import cfg
 #from oslo_log import log as logging
 import logging
+import time
 
 ######################################################################
 
@@ -202,7 +202,22 @@ class VPPForwarder(object):
 
     # end theft
     ########################################
+    def wait_for_tap(self, device_name):
+        """Wait for the external tap device to be created by the DHCP agent"""
+        wait_time = 15
+        found = False 
+        while wait_time > 0:
+            if ip_lib.device_exists(device_name):
+                app.logger.debug("External tap device %s has been created" % device_name)
+                found = True
+                break
+            else:
+                app.logger.debug("Waiting for external tap device %s to be created")
+                time.sleep(1)
+                wait_time = wait_time - 1
+        return found
 
+    
     def create_interface_on_host(self, if_type, uuid, mac):
         if uuid in self.interfaces:
             app.logger.debug('port %s repeat binding request - ignored' % uuid)
@@ -230,13 +245,15 @@ class VPPForwarder(object):
                     app.logger.debug('Creating tap interface %s with mac %s' % (int_tap_name, mac))
 
                     iface = self.vpp.create_tap(int_tap_name, mac)
-
                     # TODO(ijw): someone somewhere ought to be sorting
                     # the MTUs out
-
                     br = self.ensure_bridge(bridge_name)
-                    # This is the external TAP device that has already been precreated
-                    br.addif(tap_name)
+                    # This is the external TAP device that will be created by an agent, say the DHCP agent
+                    if self.wait_for_tap(tap_name):
+                        app.logger.debug('Adding tap interface %s to bridge %s' % (tap_name, bridge_name))
+                        br.addif(tap_name)
+                    else:
+                        app.logger.error('Could not find the external tap interface %s to bridge' % tap_name)
                     # This is the device that we just created with VPP
                     br.addif(int_tap_name)
 
@@ -357,8 +374,6 @@ app.logger.addHandler(ch)
 app.logger.debug('Debug logging enabled')
 
 def main():
-    #app.debug = True    
-    # TODO(ijw) port etc. should probably be configurable.
     cfg.CONF(sys.argv[1:])
     global vppf
     vppf = VPPForwarder(flat_network_if=cfg.CONF.ml2_vpp.flat_network_if,
