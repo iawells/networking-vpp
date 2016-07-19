@@ -40,7 +40,8 @@ from neutron.agent.linux import ip_lib
 from neutron.common import constants as n_const
 from networking_vpp import config_opts
 from oslo_config import cfg
-from oslo_log import log as logging
+#from oslo_log import log as logging
+import logging
 
 ######################################################################
 
@@ -346,19 +347,16 @@ class PortUnbind(Resource):
 
 
 
-
 # Basic Flask RESTful app setup
 app = Flask('vpp-agent')
 
 
 def main():
     app.debug = True
-    LOG = logging.getLogger('vpp-agent')
-    ch = logging.handlers.StreamHandler()
-    formatter = logging.Formatter( '%(asctime)s - %(name)s - %(message)s')
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
     ch.setFormatter(formatter)
     app.logger.addHandler(ch)
-
     app.logger.debug('Debug logging enabled')
     # TODO(ijw) port etc. should probably be configurable.
     cfg.CONF(sys.argv[1:])
@@ -371,9 +369,8 @@ def main():
     api = Api(app)
     api.add_resource(PortBind, '/ports/<id>/bind')
     api.add_resource(PortUnbind, '/ports/<id>/unbind')
-
     app.run(host='0.0.0.0',port=2704)
-    LOG.debug("Started VPP agent on host address: 0.0.0.0 and port 2704")
+    app.logger.debug("Started VPP agent on host address: 0.0.0.0 and port 2704")
 
 if __name__ == '__main__':
 
