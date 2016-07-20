@@ -310,9 +310,10 @@ class VPPForwarder(object):
                                 bridge.delif(props['int_tap_name'])
                             if bridge.is_bridged_interface(props['ext_tap_name']):
                                 bridge.delif(props['ext_tap_name'])
+                            bridge.link.set_down()
                             bridge.delbr(props['bridge_name'])
-                        except:
-                            pass
+                        except Exception as exc:
+                            app.logger.debug(exc)
             else:
                 app.logger.error('Unknown port type %s during unbind' % props['bind_type'])
 
