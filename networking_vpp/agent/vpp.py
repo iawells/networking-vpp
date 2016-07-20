@@ -81,7 +81,6 @@ class VPPInterface(object):
                                  mac_to_bytes(mac),
                                  False,  # renumber - who knows, no doc
                                  0)  # customdevinstance - who knows, no doc
-
         _check_retval(t)
 
         return t.sw_if_index  # will be -1 on failure (e.g. 'already exists')

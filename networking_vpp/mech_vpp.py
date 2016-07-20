@@ -227,7 +227,7 @@ class VPPMechanismDriver(api.MechanismDriver):
                 # then send the bind out (may equally be an update on a bound
                 # port)
                 LOG.debug("ML2-VPP: Sending bind request to agent communicator for port %(port)s"
-                          "segment %(segment)s, host %(host)s, type %(bind_type)s",
+                          "segment %(segment)s, host %(host)s, bind_type %(bind_type)s",
                           {
                           'port': port_context.current,
                           'segment': current_bind[api.BOUND_SEGMENT],
@@ -255,15 +255,17 @@ class VPPMechanismDriver(api.MechanismDriver):
     def delete_port_postcommit(self, port_context):
         port = port_context.current
         host = port_context.host
+        bind_type = self.get_vif_type(port_context)
         LOG.debug('ML2_VPP: delete_port_postcommit, port is %s' % str(port))
         LOG.debug("ML2_VPP: Sending unbind request to agent communicator for port %(port)s"
-                          "on host %(host)s",
+                          "on host %(host)s, bind_type %(bind_type)s",
                           {
                           'port': port,
                           'host': host,
+                          'bind_type': bind_type,
                           }                         
                     )
-        self.communicator.unbind(port, host)
+        self.communicator.unbind(port, host, bind_type)
 
 
 
@@ -292,7 +294,7 @@ class AgentCommunicator(object):
             else:
                 LOG.error('ML2_VPP: unknown queue op %s' % str(op))
 
-    def bind(self, port, segment, host, type):
+    def bind(self, port, segment, host, bind_type):
         """Queue up a bind message for sending.
 
         This is called in the sequence of a REST call and should take
@@ -300,17 +302,19 @@ class AgentCommunicator(object):
         """
         # TODO(ijw): should queue the bind, not send it
         LOG.debug("ML2_VPP: Communicating bind request to agent for port:%(port)s, segment:%(segment)s"
-                  "on host:%(host)s, type:%(type)s",
+                  "on host:%(host)s, bind_type:%(bind_type)s",
                   {
-                  'port': port, 'segment': segment,
-                  'host': host, 'type': type
+                  'port': port, 
+                  'segment': segment,
+                  'host': host, 
+                  'bind_type': bind_type
                   } )
         #self.queue.put(['bind', port, segment, host, type])
         ##TODO(njoy) Implement an RPC call with request response to confirm that binding/unbinding has
         ##been successful at the agent
-        self.send_bind(port, segment, host, type)
+        self.send_bind(port, segment, host, bind_type)
 
-    def unbind(self, port, host):
+    def unbind(self, port, host, bind_type):
         """Queue up an unbind message for sending.
 
         This is called in the sequence of a REST call and should take
@@ -318,22 +322,23 @@ class AgentCommunicator(object):
         """
         # TODO(ijw): should queue the unbind, not send it
         LOG.debug("ML2_VPP: Communicating unbind request to agent for port:%(port)s,"
-                  "on host:%(host)s,",
+                  "on host:%(host)s, bind_type:%(bind_type)s",
                   {
                   'port': port,
-                  'host': host
+                  'host': host,
+                  'bind_type': bind_type
                   } )
         #self.queue.put(['unbind', port, host])
-        self.send_unbind(port, host)
+        self.send_unbind(port, host, bind_type)
 
-    def send_bind(self, port, segment, host, type):
+    def send_bind(self, port, segment, host, bind_type):
         data = {
             'host': host,
             'mac_address': port['mac_address'],
             'mtu': 1500,  # not this, but what?: port['mtu'],
             'network_type': segment['network_type'],
             'segmentation_id': segment['segmentation_id'] if segment['segmentation_id'] is not None else 0, 
-            'binding_type': type
+            'binding_type': bind_type
         }
         self._unicast_msg('ports/%s/bind' % port['id'], data)
 
@@ -357,8 +362,11 @@ class AgentCommunicator(object):
                                       host=host)
             self.recursive = False
 
-    def send_unbind(self, port, host):
-        data = {'host': host}
+    def send_unbind(self, port, host, bind_type):
+        data = {
+            'host': host,
+            'binding_type': bind_type,
+        }
         urlfrag = "ports/%s/unbind" % port['id']
         LOG.debug("ML2_VPP: unbind urlfrag %s" % urlfrag)
         self._unicast_msg(urlfrag, data)

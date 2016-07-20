@@ -221,11 +221,11 @@ class VPPForwarder(object):
                 found = True
                 break
             else:
-                app.logger.debug('Waiting for external tap device %s to be created' % device_name)
+                #app.logger.debug('Waiting for external tap device %s to be created' % device_name)
                 time.sleep(2)
                 wait_time -= 2
         if not found:
-            app.logger.error('Failed waiting for external tap device %s' % device_name)
+            app.logger.error('Failed waiting for external tap device:%s' % device_name)
 
     
     def create_interface_on_host(self, if_type, uuid, mac):
@@ -246,14 +246,12 @@ class VPPForwarder(object):
                     props = {'bind_type': 'maketap', 'name': tap_name}
                 else:
                     int_tap_name = 'vpp' + name
-
                     props = {'bind_type': 'plugtap',
                              'bridge_name': bridge_name,
                              'ext_tap_name': tap_name,
                              'int_tap_name': int_tap_name
                     }
                     app.logger.debug('Creating tap interface %s with mac %s' % (int_tap_name, mac))
-
                     iface = self.vpp.create_tap(int_tap_name, mac)
                     # TODO(ijw): someone somewhere ought to be sorting
                     # the MTUs out
@@ -263,14 +261,12 @@ class VPPForwarder(object):
                     t.start()
                     # This is the device that we just created with VPP
                     br.addif(int_tap_name)
-
             elif if_type == 'vhostuser':
                 path = get_vhostuser_name(uuid)
                 iface = self.vpp.create_vhostuser(path, mac)
                 props = {'bind_type': 'vhostuser', 'path': uuid}
             else:
                 raise Exception('unsupported interface type')
-
             self.interfaces[uuid] = (iface, props)
         return self.interfaces[uuid]
 
@@ -278,21 +274,20 @@ class VPPForwarder(object):
     def bind_interface_on_host(self, if_type, uuid, mac, net_type, seg_id):
         net_br_idx = self.network_on_host(net_type, seg_id)
         (iface, props) = self.create_interface_on_host(if_type, uuid, mac)
-
         self.vpp.ifup(iface)
         self.vpp.add_to_bridge(net_br_idx, iface)
-
         return props
 
-    def unbind_interface_on_host(self, uuid):
+    def unbind_interface_on_host(self, uuid, if_type):
         if uuid not in self.interfaces:
             app.logger.debug("unknown port %s unbinding request - ignored" % uuid)
         else:
-
             iface_idx, props = self.interfaces[uuid]
-
+            if if_type != props['bind_type']:
+                app.logger.error("Incorrect unbinding port type:%s request received" % if_type)
+                app.logger.error("Expected type:%s, Received Type:%s" % (props['bind_type'], if_type))
+                return 1
             app.logger.debug("unbinding port %s, recorded as type %s" % (uuid, props['bind_type']))
-
             # We no longer need this interface.  Specifically if it's
             # a vhostuser interface it's annoying to have it around
             # because the VM's memory (hugepages) will not be
@@ -305,8 +300,10 @@ class VPPForwarder(object):
             elif props['bind_type'] in ['maketap', 'plugtap']:
                 self.vpp.delete_tap(iface_idx)
                 if props['bind_type'] == 'plugtap':
+                    name = uuid[0:11]
+                    bridge_name = 'br-' + name
                     bridge = bridge_lib.BridgeDevice(bridge_name)
-                    if bridge_device.exists():
+                    if bridge.exists():
                         # These may fail, don't care much
                         try:
                             bridge.delif(props['int_tap_name'])
@@ -332,7 +329,6 @@ class PortBind(Resource):
 
     def put(self, id):
         global vppf
-
         args = self.bind_args.parse_args()
         app.logger.debug('on host %s, binding %s %d to mac %s id %s as binding_type %s'
                          % (args['host'],
@@ -361,13 +357,22 @@ class PortBind(Resource):
 
 
 class PortUnbind(Resource):
+    bind_args = reqparse.RequestParser()
+    bind_args.add_argument('host', type=str, required=True)
+    bind_args.add_argument('binding_type', type=str, required=True)
 
     def __init(self, *args, **kwargs):
         super('PortBind', self).__init__(*args, **kwargs)
 
     def put(self, id):
         global vppf
-        vppf.unbind_interface_on_host(id)
+        args = self.bind_args.parse_args()
+        app.logger.debug('on host %s, unbinding port ID:%s with binding_type:%s'
+                         % (args['host'],
+                            id,
+                            args['binding_type'])
+                         )
+        vppf.unbind_interface_on_host(id, args['binding_type'])
 
 
 
