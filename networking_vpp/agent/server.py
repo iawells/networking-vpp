@@ -311,7 +311,7 @@ class VPPForwarder(object):
                             if bridge.owns_interface(props['ext_tap_name']):
                                 bridge.delif(props['ext_tap_name'])
                             bridge.link.set_down()
-                            bridge.delbr(props['bridge_name'])
+                            bridge.delbr()
                         except Exception as exc:
                             app.logger.debug(exc)
             else:
