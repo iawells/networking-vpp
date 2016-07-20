@@ -306,8 +306,10 @@ class VPPForwarder(object):
                     if bridge.exists():
                         # These may fail, don't care much
                         try:
-                            bridge.delif(props['int_tap_name'])
-                            bridge.delif(props['ext_tap_name'])
+                            if bridge.is_bridged_interface(props['int_tap_name']):
+                                bridge.delif(props['int_tap_name'])
+                            if bridge.is_bridged_interface(props['ext_tap_name']):
+                                bridge.delif(props['ext_tap_name'])
                             bridge.delbr(props['bridge_name'])
                         except:
                             pass
