@@ -138,7 +138,7 @@ function neutron_plugin_install_agent_packages {
 }
 
 function neutron_plugin_configure_l3_agent {
-    
+    :
 }
 
 # We have opinions on the interface driver that should attach agents
