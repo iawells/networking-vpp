@@ -220,7 +220,11 @@ class VPPForwarder(object):
             if ip_lib.device_exists(device_name):
                 app.logger.debug('External tap device %s found!' % device_name)
                 app.logger.debug('Bridging tap interface %s on %s' % (device_name, bridge_name))
-                bridge.addif(device_name)
+                if not bridge.owns_interface(device_name):
+                    bridge.addif(device_name)
+                else:
+                    app.logger.debug('Interface: %s is already added to the bridge %s' % 
+                        (device_name, bridge_name))
                 found = True
                 break
             else:
