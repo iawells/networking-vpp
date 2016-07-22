@@ -267,7 +267,8 @@ class VPPForwarder(object):
                     t = Thread(target=self.add_external_tap, args=(tap_name, br, bridge_name,))
                     t.start()
                     # This is the device that we just created with VPP
-                    br.addif(int_tap_name)
+                    if not br.owns_interface(int_tap_name):
+                        br.addif(int_tap_name)
             elif if_type == 'vhostuser':
                 path = get_vhostuser_name(uuid)
                 iface = self.vpp.create_vhostuser(path, mac)
