@@ -92,16 +92,17 @@ class VPPForwarder(object):
         
         self.networks = {}      # vlan: bridge index
         self.interfaces = {}    # uuid: if idx
-
-        for (ifname, f) in self.vpp.get_interfaces():
-            # Clean up interfaces from previous runs
-            # TODO(ijw) can't easily SPOT VLAN subifs to delete
-            if ifname.startswith('tap-'):
-                # all VPP tap interfaces are of this form
-                self.vpp.delete_tap(f.sw_if_index)
-            elif ifname.startswith('VirtualEthernet'):
-                # all VPP vhostuser interfaces are of this form
-                self.vpp.delete_vhostuser(f.sw_if_index)
+        # TODO (najoy) removing cleanups - should fetch data from the neutron server and see
+        # if the interface is being used
+        # for (ifname, f) in self.vpp.get_interfaces():
+        #     # Clean up interfaces from previous runs
+        #     # TODO(ijw) can't easily SPOT VLAN subifs to delete
+        #     if ifname.startswith('tap-'):
+        #         # all VPP tap interfaces are of this form
+        #         self.vpp.delete_tap(f.sw_if_index)
+        #     elif ifname.startswith('VirtualEthernet'):
+        #         # all VPP vhostuser interfaces are of this form
+        #         self.vpp.delete_vhostuser(f.sw_if_index)
         trunk_ifstruct = self.vpp.get_interface(self.trunk_if) if self.trunk_if else None
         flat_ifstruct = self.vpp.get_interface(self.flat_if) if self.flat_if else None
         if trunk_ifstruct is None and flat_ifstruct is None:
