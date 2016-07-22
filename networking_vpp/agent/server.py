@@ -116,9 +116,11 @@ class VPPForwarder(object):
             # TODO(ijw): when we start up in a recovery mode we may
             # want to check the local VPP config and bring it up when
             # confirmed.
+            app.logger.debug("Activating VPP's Vlan trunk interface: %s" % self.trunk_if)
             self.vpp.ifup(self.trunk_ifidx)
         if flat_ifstruct is not None:
             self.flat_ifidx = flat_ifstruct.sw_if_index
+            app.logger.debug("Activating VPP's Flat network interface: %s" % self.flat_if)
             self.vpp.ifup(self.flat_ifidx)
             
     # This, here, is us creating a VLAN backed network
