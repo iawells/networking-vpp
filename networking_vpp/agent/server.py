@@ -403,7 +403,7 @@ class Network(Resource):
         global vppf
         args = self.bind_args.parse_args()
         app.logger.debug("Create network ID:%s name:%s"
-                         "with network_type:%s and seg_id:%s"
+                         " with network_type:%s and seg_id:%s"
                          % (id,
                             args['name'],
                             args['network_type'],
@@ -414,7 +414,7 @@ class Network(Resource):
         global vppf
         args = self.bind_args.parse_args()
         app.logger.debug("Update network ID:%s name:%s"
-                         "with network_type:%s and seg_id:%s"
+                         " with network_type:%s and seg_id:%s"
                          % (id,
                             args['name'],
                             args['network_type'],
@@ -426,7 +426,7 @@ class Network(Resource):
         global vppf
         args = self.bind_args.parse_args()
         app.logger.debug("Delete network ID:%s name:%s"
-                         "with network_type:%s and seg_id:%s"
+                         " with network_type:%s and seg_id:%s"
                          % (id,
                             args['name'],
                             args['network_type'],
