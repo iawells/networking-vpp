@@ -264,14 +264,30 @@ class VPPMechanismDriver(api.MechanismDriver):
                     )
         self.communicator.unbind(port, host, bind_type)
 
+    def get_network_data(self, network_context):
+        context = network_context.current
+        return {
+            'physical_network': context['provider:physical_network'] if context['provider:physical_network'] else 'physnet',
+            'network_type' : context['provider:network_type'],
+            'id' : context['id'],
+            'segmentation_id' : context['provider:segmentation_id'] if context['provider:segmentation_id'] else 0,
+            'name': context['name']
+            }
+
     def create_network_postcommit(self, network_context):
         LOG.debug('ML2_VPP: create_network_postcommit, current network context is %s' % str(network_context.current))
+        net_data = self.get_network_data(network_context)
+        self.communicator.send_create_network_message(net_data)
 
     def delete_network_postcommit(self, network_context):
         LOG.debug('ML2_VPP: delete_network_postcommit, current network context is %s' % str(network_context.current))
+        net_data = self.get_network_data(network_context)
+        self.communicator.send_delete_network_message(net_data)
 
     def update_network_postcommit(self, network_context):
         LOG.debug('ML2_VPP: update_network_postcommit, current network context is %s' % str(network_context.current))
+        net_data = self.get_network_data(network_context)
+        self.communicator.send_update_network_message(net_data)
 
 
 
@@ -376,17 +392,17 @@ class AgentCommunicator(object):
         self._unicast_msg(urlfrag, data)
 
     def send_create_network_message(self, net_data):
-        urlfrag = "network/%s" % net_data["id"]
+        urlfrag = "networks/%s" % net_data['id']
         LOG.debug("ML2_VPP: create network urlfrag %s" % urlfrag)
         self._broadcast_msg(urlfrag, net_data, 'POST')
 
     def send_delete_network_message(self, net_data):
-        urlfrag = "network/%s" % net_data["id"]
+        urlfrag = "networks/%s" % net_data['id']
         LOG.debug("ML2_VPP: delete network urlfrag %s" % urlfrag)
         self._broadcast_msg(urlfrag, net_data, 'DELETE')
 
     def send_update_network_message(self, net_data):
-        urlfrag = "network/%s" % net_data["id"]
+        urlfrag = "networks/%s" % net_data['id']
         LOG.debug("ML2_VPP: update network urlfrag %s" % urlfrag)
         self._broadcast_msg(urlfrag, net_data, 'PUT')
     
