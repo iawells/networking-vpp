@@ -201,14 +201,12 @@ class VPPMechanismDriver(api.MechanismDriver):
         # should in future avoid the send.
 
         LOG.debug('ML2_VPP: update_port_postcommit, port is %s' % str(port_context.current))
-
         if port_context.binding_levels is not None:
             current_bind = port_context.binding_levels[-1]
             if port_context.original_binding_levels is None:
                 prev_bind = None
             else:
                 prev_bind = port_context.original_binding_levels[-1]
-
             # We have to explicitly avoid binding agent ports - DHCP,
             # L3 etc. - as vhostuser. The interface code below takes
             # care of those.
@@ -221,7 +219,6 @@ class VPPMechanismDriver(api.MechanismDriver):
             #     if owner.startswith(f):
             #         bind_type = 'plugtap'
             bind_type = self.get_vif_type(port_context)
-
             if (current_bind is not None and
                current_bind.get(api.BOUND_DRIVER) == self.MECH_NAME):
                 # then send the bind out (may equally be an update on a bound
@@ -267,6 +264,15 @@ class VPPMechanismDriver(api.MechanismDriver):
                     )
         self.communicator.unbind(port, host, bind_type)
 
+    def create_network_postcommit(self, network_context):
+        LOG.debug('ML2_VPP: create_network_postcommit, current network context is %s' % str(network_context.current))
+
+    def delete_network_postcommit(self, network_context):
+        LOG.debug('ML2_VPP: delete_network_postcommit, current network context is %s' % str(network_context.current))
+
+    def update_network_postcommit(self, network_context):
+        LOG.debug('ML2_VPP: update_network_postcommit, current network context is %s' % str(network_context.current))
+
 
 
 class AgentCommunicator(object):
@@ -296,7 +302,6 @@ class AgentCommunicator(object):
 
     def bind(self, port, segment, host, bind_type):
         """Queue up a bind message for sending.
-
         This is called in the sequence of a REST call and should take
         as little time as possible.
         """
@@ -349,7 +354,6 @@ class AgentCommunicator(object):
         # will wait until then.  For us this is useful beyond the usual
         # reasons of deplying the VM start until DHCP can be reached,
         # because we know the server socket is in place for the port.
-
         context = n_context.get_admin_context()
         plugin = manager.NeutronManager.get_plugin()
         # Bodge
@@ -370,6 +374,40 @@ class AgentCommunicator(object):
         urlfrag = "ports/%s/unbind" % port['id']
         LOG.debug("ML2_VPP: unbind urlfrag %s" % urlfrag)
         self._unicast_msg(urlfrag, data)
+
+    def send_create_network_message(self, net_data):
+        urlfrag = "network/%s" % net_data["id"]
+        LOG.debug("ML2_VPP: create network urlfrag %s" % urlfrag)
+        self._broadcast_msg(urlfrag, net_data, 'POST')
+
+    def send_delete_network_message(self, net_data):
+        urlfrag = "network/%s" % net_data["id"]
+        LOG.debug("ML2_VPP: delete network urlfrag %s" % urlfrag)
+        self._broadcast_msg(urlfrag, net_data, 'DELETE')
+
+    def send_update_network_message(self, net_data):
+        urlfrag = "network/%s" % net_data["id"]
+        LOG.debug("ML2_VPP: update network urlfrag %s" % urlfrag)
+        self._broadcast_msg(urlfrag, net_data, 'PUT')
+    
+    def _broadcast_msg(self, urlfrag, msg, msg_type):
+        if msg_type == 'POST':
+            LOG.debug("ML2_VPP: sending network create message to all VPP agents")
+            for url in self.agents:
+                LOG.debug("ML2_VPP: Sending message:%s to agent at:%s" % (msg, url+urlfrag))
+                requests.post(url + urlfrag, data=msg)
+        elif msg_type == 'DELETE':
+            LOG.debug("ML2_VPP: sending network delete message to all VPP agents")
+            for url in self.agents:
+                LOG.debug("ML2_VPP: Sending message:%s to agent at:%s" % (msg, url+urlfrag))
+                requests.delete(url + urlfrag, data=msg)
+        elif msg_type == 'PUT':
+            LOG.debug("ML2_VPP: sending network update message to all VPP agents")
+            for url in self.agents:
+                LOG.debug("ML2_VPP: Sending message:%s to agent at:%s" % (msg, url+urlfrag))
+                requests.put(url + urlfrag, data=msg)
+        else:
+            LOG.error("ML2_VPP: Unknown message type:%s" % msg_type)
 
     def _unicast_msg(self, urlfrag, msg):
         # Send unicast message to the agent running on the host
