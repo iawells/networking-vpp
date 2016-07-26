@@ -167,7 +167,7 @@ class VPPForwarder(object):
                                'segmentation_id': seg_id,
                                'network_name' : net_name
                                   }
-            app.logger.debug('Created network UUID:%s-%s' % (net_uuid, self.nets[net_uuid])
+            app.logger.debug('Created network UUID:%s-%s' % (net_uuid, self.nets[net_uuid]))
         return self.nets[net_uuid]
         #return self.networks[(type, seg_id)]
 
