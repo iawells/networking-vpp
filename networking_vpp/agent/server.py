@@ -216,6 +216,7 @@ class VPPForwarder(object):
         except Exception:
             app.logger.error("Delete Network: network UUID:%s is unknown to agent" % net_uuid)
         self.vpp.delete_bridge_domain(net['bridge_domain_id'])
+        self.vpp.ifdown(net['if_upstream_idx'])
 
     ########################################
     # stolen from LB driver

@@ -196,3 +196,12 @@ class VPPInterface(object):
                 ifidx,
                 1, 1,               # admin and link up
                 0)                   # err, I can set the delected flag?
+
+    def ifdown(self, *ifidxes):
+        for ifidx in ifidxes:
+            vpp_papi.sw_interface_set_flags(
+                ifidx,
+                0, 0,               # admin and link down
+                0)                   # err, I can set the delected flag?
+
+
