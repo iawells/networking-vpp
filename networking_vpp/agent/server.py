@@ -76,8 +76,10 @@ class VPPForwarder(object):
                  vxlan_bcast_addr=None,
                  vxlan_vrf=None):
         self.vpp = vpp.VPPInterface()
-        # This is the flat network interface for providing FLAT networking
-        self.flat_if = flat_network_if
+        # This is the list of flat network interfaces for providing FLAT networking
+        self.flat_if = flat_network_if.split(',')
+        self.active_ifs = set() #set of used interfaces for flat networking
+
         # This is the trunk interface for VLAN networking
         self.trunk_if = vlan_trunk_if
 
@@ -93,6 +95,7 @@ class VPPForwarder(object):
         self.networks = {}      # vlan: bridge index
         self.interfaces = {}    # uuid: if idx
         self.nets = {} # net_uuid : {data}
+        
         # TODO (najoy) removing cleanups - should fetch data from the neutron server and see
         # if the interface is being used
         # for (ifname, f) in self.vpp.get_interfaces():
@@ -104,26 +107,48 @@ class VPPForwarder(object):
         #     elif ifname.startswith('VirtualEthernet'):
         #         # all VPP vhostuser interfaces are of this form
         #         self.vpp.delete_vhostuser(f.sw_if_index)
-        trunk_ifstruct = self.vpp.get_interface(self.trunk_if) if self.trunk_if else None
-        flat_ifstruct = self.vpp.get_interface(self.flat_if) if self.flat_if else None
-        if trunk_ifstruct is None and flat_ifstruct is None:
-		    raise Exception("Could not find a VPP uplink interface:%s" % self.trunk_if or self.flat_if)
-        if trunk_ifstruct is not None:
-            self.trunk_ifidx = trunk_ifstruct.sw_if_index
-            # This interface is not automatically up just because
-            # we've started and we need to ensure it is before
-            # proceeding.
+        # trunk_ifstruct = self.vpp.get_interface(self.trunk_if) if self.trunk_if else None
+        #flat_ifstruct = self.vpp.get_interface(self.flat_if) if self.flat_if else None
+      #   if trunk_ifstruct is None and flat_ifstruct is None:
+		    # raise Exception("Could not find a VPP uplink interface:%s" % self.trunk_if or self.flat_if)
+      #   if trunk_ifstruct is not None:
+      #       self.trunk_ifidx = trunk_ifstruct.sw_if_index
+      #       # This interface is not automatically up just because
+      #       # we've started and we need to ensure it is before
+      #       # proceeding.
 
-            # TODO(ijw): when we start up in a recovery mode we may
-            # want to check the local VPP config and bring it up when
-            # confirmed.
-            app.logger.debug("Activating VPP's Vlan trunk interface: %s" % self.trunk_if)
-            self.vpp.ifup(self.trunk_ifidx)
-        if flat_ifstruct is not None:
-            self.flat_ifidx = flat_ifstruct.sw_if_index
-            app.logger.debug("Activating VPP's Flat network interface: %s" % self.flat_if)
-            self.vpp.ifup(self.flat_ifidx)
-            
+      #       # TODO(ijw): when we start up in a recovery mode we may
+      #       # want to check the local VPP config and bring it up when
+      #       # confirmed.
+      #       app.logger.debug("Activating VPP's Vlan trunk interface: %s" % self.trunk_if)
+      #       self.vpp.ifup(self.trunk_ifidx)
+        # if flat_ifstruct is not None:
+        #     self.flat_ifidx = flat_ifstruct.sw_if_index
+        #     app.logger.debug("Activating VPP's Flat network interface: %s" % self.flat_if)
+        #     self.vpp.ifup(self.flat_ifidx)
+    
+    def get_flat_interface(self):
+        """ Return the next available interface for flat networking """
+        interface = None
+        for intf in self.flat_if:
+            if intf not in self.active_ifs:
+                app.logger.debug("Using interface:%s for flat networking" % intf)
+                interface = intf
+                break
+        return interface
+    
+    def get_trunk_interface(self):
+        """ Return the trunk interface for VLAN networking """
+        #TODO(najoy) Return the trunk interface corresponding to the physical network mapping
+        intf = self.trunk_if if self.trunk_if else None
+        if intf:
+            app.logger.debug("Using trunk interface:%s for VLAN networking" % intf)
+        return intf
+
+    def get_vpp_ifidx(self, if_name):
+        """ Return VPP's interface index value for the network interface""" 
+        return self.vpp.get_interface(if_name).sw_if_index
+    
     # This, here, is us creating a FLAT, VLAN or VxLAN backed network
     def network_on_host(self, net_uuid, net_type=None, seg_id=None, net_name=None):
         if net_uuid not in self.nets:
@@ -132,22 +157,37 @@ class VPPForwarder(object):
             # VPP needs to allow us to name or label them so that we
             # can find them when we restart
             if net_type == 'flat':
-                if_upstream = self.flat_ifidx
-                app.logger.debug('Adding upstream interface:%s to bridge for flat networking' % self.flat_if)
+                intf = self.get_flat_interface()
+                #TODO(najoy): Need to send a return value so the ML2 driver can raise an exception and prevent
+                #network creation
+                if intf is None:
+                    app.logger.error("Error: creating network as a flat network interface is not available")
+                    return {}
+                if_upstream = self.get_vpp_ifidx(intf)
+                #if_upstream = self.flat_ifidx
+                app.logger.debug('Adding upstream interface-indx:%s-%s to bridge for flat networking' % (intf, if_upstream))
+                self.active_ifs.add(intf)
             elif net_type == 'vlan':
                 # TODO(ijw): this VLAN subinterface may already exist, and
                 # may even be in another bridge domain already (see
                 # above).
-                if_upstream = self.vpp.create_vlan_subif(self.trunk_ifidx,
+                intf = self.get_trunk_interface()
+                if intf is None:
+                    app.logger.error("Error: creating network as a trunk network interface is not available")
+                    return {}
+                trunk_ifidx = self.get_vpp_ifidx(intf)
+                app.logger.debug("Activating VPP's Vlan trunk interface: %s" % intf)
+                self.vpp.ifup(trunk_ifidx)
+                if_upstream = self.vpp.create_vlan_subif(trunk_ifidx,
                                                          seg_id)
                 app.logger.debug('Adding upstream trunk interface:%s.%s \
-                to bridge for vlan networking' % (self.trunk_if,seg_id))
-            elif net_type == 'vxlan':
-                if_upstream = \
-                    self.vpp.create_srcrep_vxlan_subif(self, self.vxlan_vrf,
-                                                       self.vxlan_src_addr,
-                                                       self.vxlan_bcast_addr,
-                                                       seg_id)
+                to bridge for vlan networking' % (intf, seg_id))
+            # elif net_type == 'vxlan':
+            #     if_upstream = \
+            #         self.vpp.create_srcrep_vxlan_subif(self, self.vxlan_vrf,
+            #                                            self.vxlan_src_addr,
+            #                                            self.vxlan_bcast_addr,
+            #                                            seg_id)
             else:
                 raise Exception('network type %s not supported', net_type)
             
@@ -162,6 +202,7 @@ class VPPForwarder(object):
             #self.networks[(net_type, seg_id)] = id
             self.nets[net_uuid] = {
                                'bridge_domain_id': id,
+                               'if_upstream': intf,
                                'if_upstream_idx': if_upstream,
                                'network_type': net_type,
                                'segmentation_id': seg_id,
