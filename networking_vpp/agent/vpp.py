@@ -140,7 +140,18 @@ class VPPInterface(object):
             False,  # enable ARP termination in the BD
             True  # is an add
         )
+        _check_retval(t)
 
+    def delete_bridge_domain(self, id):
+        t = vpp_papi.bridge_domain_add_del(
+            id,  # the numeric ID of this domain
+            True,  # enable bcast and mcast flooding
+            True,  # enable unknown ucast flooding
+            True,  # enable forwarding on all interfaces
+            True,  # enable learning on all interfaces
+            False,  # enable ARP termination in the BD
+            False  # is a delete
+        )
         _check_retval(t)
 
     def create_vlan_subif(self, if_id, vlan_tag):
