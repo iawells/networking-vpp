@@ -267,10 +267,12 @@ class VPPMechanismDriver(api.MechanismDriver):
     def get_network_data(self, network_context):
         context = network_context.current
         return {
-            'physical_network': context['provider:physical_network'] if context['provider:physical_network'] else 'physnet',
+            'physical_network': context['provider:physical_network'] \
+                                   if context['provider:physical_network'] else 'physnet',
             'network_type' : context['provider:network_type'],
             'id' : context['id'],
-            'segmentation_id' : context['provider:segmentation_id'] if context['provider:segmentation_id'] else 0,
+            'segmentation_id' : context['provider:segmentation_id'] \
+                                   if context['provider:segmentation_id'] else 0,
             'name': context['name']
             }
 
@@ -359,7 +361,8 @@ class AgentCommunicator(object):
             'mtu': 1500,  # not this, but what?: port['mtu'],
             'network_type': segment['network_type'],
             'segmentation_id': segment['segmentation_id'] if segment['segmentation_id'] is not None else 0, 
-            'binding_type': bind_type
+            'binding_type': bind_type,
+            'network_id': port['network_id']
         }
         self._unicast_msg('ports/%s/bind' % port['id'], data)
 

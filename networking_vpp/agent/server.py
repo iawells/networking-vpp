@@ -92,6 +92,7 @@ class VPPForwarder(object):
         
         self.networks = {}      # vlan: bridge index
         self.interfaces = {}    # uuid: if idx
+        self.nets = {} # net_uuid : {data}
         # TODO (najoy) removing cleanups - should fetch data from the neutron server and see
         # if the interface is being used
         # for (ifname, f) in self.vpp.get_interfaces():
@@ -123,16 +124,17 @@ class VPPForwarder(object):
             app.logger.debug("Activating VPP's Flat network interface: %s" % self.flat_if)
             self.vpp.ifup(self.flat_ifidx)
             
-    # This, here, is us creating a VLAN backed network
-    def network_on_host(self, type, seg_id):
-        if (type, seg_id) not in self.networks:
+    # This, here, is us creating a FLAT, VLAN or VxLAN backed network
+    def network_on_host(self, net_uuid, net_type=None, seg_id=None, net_name=None):
+        if net_uuid not in self.nets:
+            #if (net_type, seg_id) not in self.networks:
             # TODO(ijw): bridge domains have no distinguishing marks.
             # VPP needs to allow us to name or label them so that we
             # can find them when we restart
-            if type == 'flat':
+            if net_type == 'flat':
                 if_upstream = self.flat_ifidx
                 app.logger.debug('Adding upstream interface:%s to bridge for flat networking' % self.flat_if)
-            elif type == 'vlan':
+            elif net_type == 'vlan':
                 # TODO(ijw): this VLAN subinterface may already exist, and
                 # may even be in another bridge domain already (see
                 # above).
@@ -140,30 +142,34 @@ class VPPForwarder(object):
                                                          seg_id)
                 app.logger.debug('Adding upstream trunk interface:%s.%s \
                 to bridge for vlan networking' % (self.trunk_if,seg_id))
-            elif type == 'vxlan':
+            elif net_type == 'vxlan':
                 if_upstream = \
                     self.vpp.create_srcrep_vxlan_subif(self, self.vxlan_vrf,
                                                        self.vxlan_src_addr,
                                                        self.vxlan_bcast_addr,
                                                        seg_id)
             else:
-                raise Exception('type %s not supported', type)
+                raise Exception('network type %s not supported', net_type)
             
             self.vpp.ifup(if_upstream)
-                
             # May not remain this way but we use the VLAN ID as the
             # bridge ID; TODO(ijw): bridge ID can already exist, we
             # should check till we find a free one
             id = self.next_bridge_id
             self.next_bridge_id += 1
-
             self.vpp.create_bridge_domain(id)
-
             self.vpp.add_to_bridge(id, if_upstream)
-
-            self.networks[(type, seg_id)] = id
-
-        return self.networks[(type, seg_id)]
+            #self.networks[(net_type, seg_id)] = id
+            self.nets[net_uuid] = {
+                               'bridge_domain_id': id,
+                               'if_upstream_idx': if_upstream,
+                               'network_type': net_type,
+                               'segmentation_id': seg_id,
+                               'network_name' : net_name
+                                  }
+            app.logger.debug('Created network UUID:%s-%s' % (net_uuid, self.nets[net_uuid])
+        return self.nets[net_uuid]
+        #return self.networks[(type, seg_id)]
 
     ########################################
     # stolen from LB driver
@@ -279,8 +285,9 @@ class VPPForwarder(object):
         return self.interfaces[uuid]
 
 
-    def bind_interface_on_host(self, if_type, uuid, mac, net_type, seg_id):
-        net_br_idx = self.network_on_host(net_type, seg_id)
+    def bind_interface_on_host(self, if_type, uuid, mac, net_type, seg_id, net_id):
+        #net_br_idx = self.network_on_host(net_type, seg_id)
+        net_br_idx = self.network_on_host(net_id)['bridge_domain_id']
         (iface, props) = self.create_interface_on_host(if_type, uuid, mac)
         self.vpp.ifup(iface)
         self.vpp.add_to_bridge(net_br_idx, iface)
@@ -337,6 +344,7 @@ class PortBind(Resource):
     bind_args.add_argument('network_type', type=str, required=True)
     bind_args.add_argument('host', type=str, required=True)
     bind_args.add_argument('binding_type', type=str, required=True)
+    bind_args.add_argument('network_id', type=str, required=True)
 
     def __init(self, *args, **kwargs):
         super('PortBind', self).__init__(*args, **kwargs)
@@ -344,13 +352,15 @@ class PortBind(Resource):
     def put(self, id):
         global vppf
         args = self.bind_args.parse_args()
-        app.logger.debug('on host %s, binding %s %d to mac %s id %s as binding_type %s'
+        app.logger.debug("on host %s, binding %s %d to mac %s id %s as binding_type %s"
+                         "on network %s"
                          % (args['host'],
                             args['network_type'],
                             args['segmentation_id'],
                             args['mac_address'], 
                             id,
-                            args['binding_type'])
+                            args['binding_type']),
+                            args['network_id']
                          )
         if args['binding_type'] in 'vhostuser':
             app.logger.debug('Creating a vhostuser port:%s binding on host %s' % (id, args['host']))
@@ -358,14 +368,18 @@ class PortBind(Resource):
                                     id,
                                     args['mac_address'],
                                     args['network_type'],
-                                    args['segmentation_id'])
+                                    args['segmentation_id'],
+                                    args['network_id']
+                                    )
         elif args['binding_type'] in 'plugtap':
             app.logger.debug('Creating a plugtap port:%s binding on host %s' % (id, args['host']))
             vppf.bind_interface_on_host('plugtap',
                                     id,
                                     args['mac_address'],
                                     args['network_type'],
-                                    args['segmentation_id'])
+                                    args['segmentation_id'],
+                                    args['network_id']
+                                    )
         else:
             app.logger.error('Unsupported binding type :%s requested' % args['binding_type'])
 
@@ -410,6 +424,7 @@ class Network(Resource):
                             args['segmentation_id']
                             )
                          )
+        vppf.network_on_host(id, args['network_type'], args['segmentation_id'], args['name'])
     def put(self, id):
         global vppf
         args = self.bind_args.parse_args()
