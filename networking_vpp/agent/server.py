@@ -359,8 +359,8 @@ class PortBind(Resource):
                             args['segmentation_id'],
                             args['mac_address'], 
                             id,
-                            args['binding_type']),
-                            args['network_id']
+                            args['binding_type'],
+                            args['network_id'])
                          )
         if args['binding_type'] in 'vhostuser':
             app.logger.debug('Creating a vhostuser port:%s binding on host %s' % (id, args['host']))
