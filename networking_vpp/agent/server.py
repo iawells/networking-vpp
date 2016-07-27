@@ -199,8 +199,10 @@ class VPPForwarder(object):
             # bridge ID; TODO(ijw): bridge ID can already exist, we
             # should check till we find a free one
             #id = self.next_bridge_id
-            id = self.get_bridge_id() if self.get_bridge_id() is not None else self.next_bridge_id += 1
-            #self.next_bridge_id += 1
+            id = self.get_bridge_id()
+            if id is None:
+                id = self.next_bridge_id
+                self.next_bridge_id += 1
             self.vpp.create_bridge_domain(id)
             self.vpp.add_to_bridge(id, if_upstream)
             #self.networks[(net_type, seg_id)] = id
