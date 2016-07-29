@@ -67,7 +67,7 @@ for i in $( seq 1 $num_networks);do
 
   while [[ ${TOTAL_TIME} -gt 0 ]] && ((FOUND_DHCP_NS)) && ((!FOUND_VM)); do
      if ((VM_ALIVE)); then
-        echo "Success: VM${i} is now IP rechable from the DHCP namespace!!!"
+        echo "Success!!: VM${i} is now IP reachable from the DHCP namespace!!!"
         FOUND_VM=1
      fi
      if sudo ip netns exec ${qdhcp_ns} ping -c 4 ${vm_ip} > /dev/null 2>&1; then
