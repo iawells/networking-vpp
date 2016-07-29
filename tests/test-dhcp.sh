@@ -9,7 +9,7 @@
 ###SET PROGRAM VARIABLES####
 (( num_networks=2 ))
 devstack_dir=/home/demo/devstack
-boot_vm=/home/demo/boot-vm
+boot_vm=./boot-vm
 source ${devstack_dir}/openrc admin admin
 network_type=flat
 network_prefix=private
