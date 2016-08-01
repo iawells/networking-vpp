@@ -142,8 +142,12 @@ class VPPForwarder(object):
         return intf
 
     def get_vpp_ifidx(self, if_name):
-        """ Return VPP's interface index value for the network interface""" 
-        return self.vpp.get_interface(if_name).sw_if_index
+        """ Return VPP's interface index value for the network interface"""
+        if self.vpp.get_interface(if_name):
+            return self.vpp.get_interface(if_name).sw_if_index
+        else:
+            app.logger.error("Error obtaining interface data from vpp for interface:%s" % if_name)
+            return None
 
     # This, here, is us creating a FLAT, VLAN or VxLAN backed network
     def network_on_host(self, net_uuid, net_type=None, seg_id=None, net_name=None):
