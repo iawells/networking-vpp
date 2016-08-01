@@ -37,6 +37,10 @@ function configure_vpp {
 	iniset /$Q_PLUGIN_CONF_FILE ml2_vpp vlan_trunk_if $VLAN_TRUNK_IF
     fi
 	
+    if [ ! -z "$FLAT_NETWORK_IF" ] ; then
+    iniset /$Q_PLUGIN_CONF_FILE ml2_vpp flat_network_if $FLAT_NETWORK_IF
+    fi
+
     if [ ! -z "$VXLAN_SRC_ADDR" ] ; then
 	iniset /$Q_PLUGIN_CONF_FILE ml2_vpp vxlan_src_addr $VXLAN_SRC_ADDR
     fi
@@ -131,6 +135,10 @@ vpp_debug tput setab 9
 
 function neutron_plugin_install_agent_packages {
     install_package bridge-utils
+}
+
+function neutron_plugin_configure_l3_agent {
+    :
 }
 
 # We have opinions on the interface driver that should attach agents
