@@ -359,7 +359,7 @@ class VPPForwarder(object):
         self.vpp.ifup(iface_idx)
         self.vpp.add_to_bridge(net_br_idx, iface_idx)
         app.logger.debug('Bound vpp interface with sw_idx:%s on '
-                         'bridge domain:%s' 
+                         'bridge domain:%s'
                          % (iface, net_br_idx))
         return props
 

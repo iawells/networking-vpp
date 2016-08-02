@@ -111,7 +111,7 @@ class VPPInterface(object):
                       % (qemu_user, qemu_group))
         uid = pwd.getpwnam(qemu_user).pw_uid
         gid = grp.getgrnam(qemu_group).gr_gid
-        
+
         os.chown(ifpath, uid, gid)
         os.chmod(ifpath, 0o770)
 
