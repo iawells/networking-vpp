@@ -185,8 +185,8 @@ class VPPMechanismDriver(api.MechanismDriver):
         return True
 
     def physnet_known(self, physnet, network_type):
-	# TODO(ijw): this should be a range of physical networks the agents report in.
-	return True
+        # TODO(ijw): this should be a range of physical networks the agents report in.
+        return True
 
     def check_vlan_transparency(self, port_context):
         """Check if the network supports vlan transparency.
@@ -283,9 +283,9 @@ class AgentCommunicator(object):
 
     def _worker(self):
         while True:
-	    LOG.error("ML2_VPP: worker thread pausing")
+            LOG.error("ML2_VPP: worker thread pausing")
             msg = self.queue.get()
-	    LOG.error("ML2_VPP: worker thread active")
+            LOG.error("ML2_VPP: worker thread active")
             op = msg[0]
             args = msg[1:]
             if op == 'bind':
