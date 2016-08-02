@@ -33,6 +33,7 @@ from flask_restful import reqparse
 from flask_restful import Resource
 import logging
 import os
+import distro
 import sys
 from threading import Thread
 import time
@@ -65,6 +66,32 @@ VHOSTUSER_DIR = '/tmp'
 def get_vhostuser_name(uuid):
     return os.path.join(VHOSTUSER_DIR, uuid)
 
+
+def get_distro_family():
+    if distro.id() in ['rhel', 'centos', 'fedora']:
+        return 'redhat'
+    else:
+        return distro.id()
+
+
+def get_qemu_default():
+    # TODO(ijw): this should be moved to the devstack code
+    distro = get_distro_family()
+    if distro == 'redhat':
+        qemu_user = 'qemu'
+        qemu_group = 'qemu'
+    elif distro == 'ubuntu':
+        qemu_user = 'libvirt-qemu'
+        qemu_group = 'libvirtd'
+    else:
+        # let's just try libvirt-qemu for now, maybe we should instead
+        # print error messsage and exit?
+        qemu_user = 'libvirt-qemu'
+        qemu_group = 'kvm'
+
+    return (qemu_user, qemu_group)
+
+
 ######################################################################
 
 
@@ -74,7 +101,9 @@ class VPPForwarder(object):
                  physnets,  # physnet_name: interface-name
                  vxlan_src_addr=None,
                  vxlan_bcast_addr=None,
-                 vxlan_vrf=None):
+                 vxlan_vrf=None,
+                 qemu_user=None,
+                 qemu_group=None):
         self.vpp = vpp.VPPInterface(log)
         # This is the list of flat network interfaces for providing
         # FLAT networking
@@ -83,6 +112,18 @@ class VPPForwarder(object):
         self.active_ifs = set()
 
         self.physnets = physnets
+        self.qemu_user = qemu_user
+        self.qemu_group = qemu_group
+
+        # TODO(ijw): these should actually be physical networks;
+        # named and indexed by name.  There's no distinction between
+        # 'flat' and 'trunk' interfaces, only the provider networks on top.
+
+        # This is the flat network interface for providing FLAT networking
+        self.flat_if = flat_network_if
+
+        # This is the trunk interface for VLAN networking
+        self.trunk_if = vlan_trunk_if
 
         # This is the address we'll use if we plan on broadcasting
         # vxlan packets
@@ -260,7 +301,8 @@ class VPPForwarder(object):
         if uuid in self.interfaces:
             app.logger.debug('port %s repeat binding request - ignored' % uuid)
         else:
-            app.logger.debug('binding port %s as type %s' % (uuid, if_type))
+            app.logger.debug('binding port %s as type %s' %
+                             (uuid, if_type))
 
             # TODO(ijw): naming not obviously consistent with
             # Neutron's naming
@@ -297,7 +339,8 @@ class VPPForwarder(object):
                         br.addif(int_tap_name)
             elif if_type == 'vhostuser':
                 path = get_vhostuser_name(uuid)
-                iface = self.vpp.create_vhostuser(path, mac)
+                iface = self.vpp.create_vhostuser(path, mac, self.qemu_user,
+                                                  self.qemu_group)
                 props = {'bind_type': 'vhostuser', 'path': uuid}
             else:
                 raise Exception('unsupported interface type')
@@ -322,13 +365,14 @@ class VPPForwarder(object):
 
     def unbind_interface_on_host(self, uuid):
         if uuid not in self.interfaces:
-            app.logger.debug("unknown port %s unbinding request - ignored"
+            app.logger.debug('unknown port %s unbinding request - ignored'
                              % uuid)
         else:
             iface_idx, props = self.interfaces[uuid]
 
-            app.logger.debug("unbinding port %s, recorded as type %s"
+            app.logger.debug('unbinding port %s, recorded as type %s'
                              % (uuid, props['bind_type']))
+
             # We no longer need this interface.  Specifically if it's
             # a vhostuser interface it's annoying to have it around
             # because the VM's memory (hugepages) will not be
@@ -354,8 +398,7 @@ class VPPForwarder(object):
                         except Exception as exc:
                             app.logger.debug(exc)
             else:
-                app.logger.error('Unknown port type %s during unbind'
-                                 % props['bind_type'])
+                app.logger.error('Unknown port type %s during unbind' % props['bind_type'])
 
         # TODO(ijw): delete structures of newly unused networks with
         # delete_network
@@ -434,6 +477,18 @@ app.logger.debug('Debug logging enabled')
 
 def main():
     cfg.CONF(sys.argv[1:])
+
+    # If the user and/or group are specified in config file, we will use
+    # them as configured; otherwise we try to use defaults depending on
+    # distribution. Currently only supporting ubuntu and redhat.
+    qemu_user = cfg.CONF.ml2_vpp.qemu_user
+    qemu_group = cfg.CONF.ml2_vpp.qemu_group
+    default_user, default_group = get_qemu_default()
+    if not qemu_user:
+        qemu_user = default_user
+    if not qemu_group:
+        qemu_group = default_group
+
     global vppf
 
     physnet_list = cfg.CONF.ml2_vpp.physnets.replace(' ', '').split(',')
@@ -447,13 +502,14 @@ def main():
                         vxlan_src_addr=cfg.CONF.ml2_vpp.vxlan_src_addr,
                         vxlan_bcast_addr=cfg.CONF.ml2_vpp.vxlan_bcast_addr,
                         vxlan_vrf=cfg.CONF.ml2_vpp.vxlan_vrf)
+                        qemu_user=qemu_user,
+                        qemu_group=qemu_group)
+
+
     api = Api(app)
     api.add_resource(PortBind, '/ports/<id>/bind')
     api.add_resource(PortUnbind, '/ports/<id>/unbind')
-    app.logger.debug("Starting VPP agent on host address: 0.0.0.0 "
-                     "and port 2704")
     app.run(host='0.0.0.0', port=2704)
-
 
 if __name__ == '__main__':
     main()

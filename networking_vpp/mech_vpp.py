@@ -19,7 +19,7 @@ from oslo_log import log as logging
 import requests
 import socket
 import threading
-
+import socket
 from neutron.common import constants as n_const
 from neutron import context as n_context
 from neutron.extensions import portbindings
@@ -273,7 +273,7 @@ class AgentCommunicator(object):
             k, v = f.split('=')
             self.agents[k] = v
 
-        LOG.error("ML2_VPP: Configured agents are: %s " % str(self.agents))
+        LOG.debug("ML2_VPP: Configured agents are: %s " % str(self.agents))
         self.recursive = False
         self.queue = eventlet.queue.Queue()
         self.sync_thread = threading.Thread(
@@ -302,6 +302,12 @@ class AgentCommunicator(object):
         as little time as possible.
         """
 
+        LOG.debug("ML2_VPP: Queueing bind request for port:%(port)s, "
+                  "segment:%(segment)s on host:%(host)s, type:%(type)s",
+                  {
+                  'port': port, 'segment': segment,
+                  'host': host, 'type': binding_type
+                  } )
         self.queue.put(['bind', port, segment, host, binding_type])
 
     def unbind(self, port, host):
@@ -311,6 +317,12 @@ class AgentCommunicator(object):
         as little time as possible.
         """
 
+        LOG.debug("ML2_VPP: Queueing unbind request for port:%(port)s,"
+                  "on host:%(host)s,",
+                  {
+                  'port': port,
+                  'host': host
+                  } )
         self.queue.put(['unbind', port, host])
 
     def send_bind(self, port, segment, host, binding_type):
@@ -369,8 +381,11 @@ class AgentCommunicator(object):
             plugin.update_port_status(context, port['id'],
                                       n_const.PORT_STATUS_ACTIVE,
                                       host=host)
+            ##TODO(njoy) Implement an RPC call with request response to confirm that binding/unbinding has
+            ##been successful at the agent
             self.recursive = False
 
+    def send_unbind(self, port, host):
         """Send the unbinding message out to VPP on the compute host"""
         LOG.debug("ML2_VPP: Communicating unbind request to agent for "
                   "port:%(port)s on host:%(host)s",
@@ -378,11 +393,8 @@ class AgentCommunicator(object):
                       'port': port,
                       'host': host
                   })
-        data = {
-            'host': host,
-        }
+        data = {'host': host}
         urlfrag = "ports/%s/unbind" % port['id']
-        LOG.debug("ML2_VPP: unbind urlfrag %s" % urlfrag)
         self._unicast_msg(host, urlfrag, data)
 
     def _unicast_msg(self, host, urlfrag, msg):
