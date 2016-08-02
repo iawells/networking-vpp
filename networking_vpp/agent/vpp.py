@@ -18,6 +18,7 @@ import grp
 import os
 import pwd
 import vpp_papi
+
 from oslo_log import log as logging
 
 LOG = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ class VPPInterface(object):
 
     def create_tap(self, ifname, mac):
         t = vpp_papi.tap_connect(False,  # random MAC
-                                 str(ifname), # (we don't like unicode)
+                                 str(ifname),  # (we don't like unicode)
                                  mac_to_bytes(mac),
                                  False,  # renumber - who knows, no doc
                                  0)  # customdevinstance - who knows, no doc
@@ -115,7 +116,7 @@ class VPPInterface(object):
         return t.sw_if_index
 
     def delete_vhostuser(self, idx):
-        #LOG.debug("Deleting VPP interface - index: %s" % idx)
+        # LOG.debug("Deleting VPP interface - index: %s" % idx)
         print("Deleting VPP interface - index: %s" % idx)
         t = vpp_papi.delete_vhost_user_if(idx)
 
@@ -155,7 +156,8 @@ class VPPInterface(object):
         _check_retval(t)
 
     def create_vlan_subif(self, if_id, vlan_tag):
-        print("Creating vlan subinterface with ID:%s and vlan_tag:%s" % (if_id, vlan_tag))
+        print("Creating vlan subinterface with ID:%s and vlan_tag:%s"
+              % (if_id, vlan_tag))
         t = vpp_papi.create_vlan_subif(
             if_id,
             vlan_tag)
@@ -165,20 +167,19 @@ class VPPInterface(object):
 
         return t.sw_if_index
 
-    def create_srcrep_vxlan_subif(self, vrf_id, src_addr, bcast_addr, vnid):
-        t = vpp_papi.vxlan_add_del_tunnel(
-            true,  # is_add
-            src_addr,
-            bcast_addr,
-            vrf_id,
-            decap_next_index,   # what is this?
-            vni)
+#     def create_srcrep_vxlan_subif(self, vrf_id, src_addr, bcast_addr, vnid):
+#         t = vpp_papi.vxlan_add_del_tunnel(
+#             True,  # is_add
+#             src_addr,
+#             bcast_addr,
+#             vrf_id,
+#             decap_next_index,   # what is this?
+#             vni)
 
         _check_retval(t)
 
         return t.sw_if_index
-        
-    
+
     ########################################
 
     def add_to_bridge(self, bridx, *ifidxes):
@@ -203,5 +204,3 @@ class VPPInterface(object):
                 ifidx,
                 0, 0,               # admin and link down
                 0)                   # err, I can set the delected flag?
-
-

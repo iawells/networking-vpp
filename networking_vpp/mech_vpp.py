@@ -17,8 +17,9 @@ import eventlet.queue
 from oslo_config import cfg
 from oslo_log import log as logging
 import requests
-import threading
 import socket
+import threading
+
 from neutron.common import constants as n_const
 from neutron import context as n_context
 from neutron.extensions import portbindings
@@ -39,10 +40,11 @@ cfg.CONF.register_opts(vpp_opts, "ml2_vpp")
 
 class VPPMechanismDriver(api.MechanismDriver):
     supported_vnic_types = [portbindings.VNIC_NORMAL]
-    allowed_network_types = [p_constants.TYPE_FLAT,p_constants.TYPE_VLAN,p_constants.TYPE_VXLAN]
+    allowed_network_types = [p_constants.TYPE_FLAT,
+                             p_constants.TYPE_VLAN,
+                             p_constants.TYPE_VXLAN]
     MECH_NAME = 'vpp'
-    # TODO(ijw) should be pulled from a constants file
-    #vif_type = 'vhostuser'
+
     vif_details = {}
 
     # TODO(ijw): we have no agent registration because we're not using
@@ -54,10 +56,9 @@ class VPPMechanismDriver(api.MechanismDriver):
         self.communicator = AgentCommunicator()
 
     def get_vif_type(self, port_context):
-        """
-        Determine the type of the vif to be bound from port context
-        """
-        #Default vif type
+        """Determine the type of the vif to be bound from port context"""
+
+        # Default vif type
         vif_type = 'vhostuser'
 
         # We have to explicitly avoid binding agent ports - DHCP,
@@ -70,7 +71,6 @@ class VPPMechanismDriver(api.MechanismDriver):
                 vif_type = 'plugtap'
         LOG.debug("ML2_VPP: vif_type to be bound is: %s", vif_type)
         return vif_type
-
 
     def bind_port(self, port_context):
         """Attempt to bind a port.
@@ -120,7 +120,8 @@ class VPPMechanismDriver(api.MechanismDriver):
         vnic_type = port_context.current.get(portbindings.VNIC_TYPE,
                                              portbindings.VNIC_NORMAL)
         if vnic_type not in self.supported_vnic_types:
-            LOG.debug("ML2_VPP: Refusing to bind due to unsupported vnic_type: %s",
+            LOG.debug("ML2_VPP: Refusing to bind due to unsupported "
+                      "vnic_type: %s",
                       vnic_type)
             return
 
@@ -135,7 +136,7 @@ class VPPMechanismDriver(api.MechanismDriver):
                     vif_details['vhostuser_mode'] = 'client'
                 LOG.debug('ML2_VPP: Setting details: %s', vif_details)
                 port_context.set_binding(segment[api.ID],
-                                         vif_type
+                                         vif_type,
                                          vif_details)
                 LOG.debug("ML2_VPP: Bound using segment: %s", segment)
                 return
@@ -156,9 +157,10 @@ class VPPMechanismDriver(api.MechanismDriver):
         network_type = segment[api.NETWORK_TYPE]
         if network_type not in self.allowed_network_types:
             LOG.debug(
-                'ML2_VPP: Network %(network_id)s is %(network_type)s, but this driver '
-                'only supports types %(allowed_network_types)s.  The type '
-                'must be supported  if binding is to succeed.',
+                'ML2_VPP: Network %(network_id)s is %(network_type)s, '
+                'but this driver only supports types '
+                '%(allowed_network_types)s. '
+                'The type must be supported  if binding is to succeed.',
                 {'network_id': segment['id'],
                  'network_type': network_type,
                  'allowed_network_types':
@@ -178,17 +180,14 @@ class VPPMechanismDriver(api.MechanismDriver):
                      'physnet': physnet}
                 )
                 return False
-        else:
-            return False # We don't support other types of network
 
         return True
 
     def physnet_known(self, physnet, network_type):
-        """ 
-        Support binding to arbitrary flat networks and a single Vlan physical network
-        """
+        """Determine if a physical network is known to the system"""
         if network_type == 'flat':
-            # TODO(ijw): this should actually be checking physical networks both ways
+            # TODO(ijw): this should actually be checking physical
+            # networks both ways
             return True
         else:
             return physnet in self.physical_networks
@@ -215,7 +214,8 @@ class VPPMechanismDriver(api.MechanismDriver):
         # ignore it.  Doing less work is nevertheless good, so we
         # should in future avoid the send.
 
-        LOG.debug('ML2_VPP: update_port_postcommit, port is %s' % str(port_context.current))
+        LOG.debug('ML2_VPP: update_port_postcommit, port is %s'
+                  % str(port_context.current))
         if port_context.binding_levels is not None:
             current_bind = port_context.binding_levels[-1]
             if port_context.original_binding_levels is None:
@@ -229,16 +229,16 @@ class VPPMechanismDriver(api.MechanismDriver):
                current_bind.get(api.BOUND_DRIVER) == self.MECH_NAME):
                 # then send the bind out (may equally be an update on a bound
                 # port)
-                LOG.debug("ML2-VPP: Sending bind request to agent communicator for port %(port)s"
-                          "segment %(segment)s, host %(host)s, bind_type %(bind_type)s",
+                LOG.debug("ML2-VPP: Sending bind request to agent "
+                          "communicator for port %(port) segment %(segment)s, "
+                          "host %(host)s, bind_type %(bind_type)s",
                           {
-                          'port': port_context.current,
-                          'segment': current_bind[api.BOUND_SEGMENT],
-                          'host': port_context.host,
-                          'bind_type': bind_type
-                          }
-                         )
-                # TODO get the physical network
+                              'port': port_context.current,
+                              'segment': current_bind[api.BOUND_SEGMENT],
+                              'host': port_context.host,
+                              'bind_type': bind_type
+                          })
+                # TODO(ijw) get the physical network
                 self.communicator.bind(port_context.current,
                                        current_bind[api.BOUND_SEGMENT],
                                        port_context.host,
@@ -246,13 +246,12 @@ class VPPMechanismDriver(api.MechanismDriver):
             elif (prev_bind is not None and
                   prev_bind.get(api.BOUND_DRIVER) == self.MECH_NAME):
                 # If we were the last binder of this port but are no longer
-                LOG.debug("ML2_VPP: Sending unbind request to agent communicator for port %(port)s"
-                          "on host %(host)s",
+                LOG.debug("ML2_VPP: Sending unbind request to agent "
+                          "communicator for port %(port)s on host %(host)s",
                           {
-                          'port': port_context.current,
-                          'host': port_context.original_host,
-                          }
-                         )
+                              'port': port_context.current,
+                              'host': port_context.original_host,
+                          })
                 self.communicator.unbind(port_context.current,
                                          port_context.original_host)
 
@@ -261,43 +260,47 @@ class VPPMechanismDriver(api.MechanismDriver):
         host = port_context.host
         bind_type = self.get_vif_type(port_context)
         LOG.debug('ML2_VPP: delete_port_postcommit, port is %s' % str(port))
-        LOG.debug("ML2_VPP: Sending unbind request to agent communicator for port %(port)s"
-                          "on host %(host)s, bind_type %(bind_type)s",
-                          {
-                          'port': port,
-                          'host': host,
-                          'bind_type': bind_type,
-                          }                         
-                    )
+        LOG.debug("ML2_VPP: Sending unbind request to agent communicator "
+                  "for port %(port)s on host %(host)s, "
+                  "bind_type %(bind_type)s",
+                  {
+                      'port': port,
+                      'host': host,
+                      'bind_type': bind_type,
+                  })
         self.communicator.unbind(port, host, bind_type)
 
     def get_network_data(self, network_context):
         context = network_context.current
         return {
-            'physical_network': context['provider:physical_network'] \
-                                   if context['provider:physical_network'] else 'physnet',
-            'network_type' : context['provider:network_type'],
-            'id' : context['id'],
-            'segmentation_id' : context['provider:segmentation_id'] \
-                                   if context['provider:segmentation_id'] else 0,
+            'physical_network': context.get('provider:physical_network',
+                                            'physnet'),
+            'network_type': context['provider:network_type'],
+            'id': context['id'],
+            'segmentation_id': context.get('provider:segmentation_id', 0),
             'name': context['name']
-            }
+        }
 
     def create_network_postcommit(self, network_context):
-        LOG.debug('ML2_VPP: create_network_postcommit, current network context is %s' % str(network_context.current))
+        LOG.debug('ML2_VPP: create_network_postcommit, '
+                  'current network context is %s'
+                  % str(network_context.current))
         net_data = self.get_network_data(network_context)
         self.communicator.send_create_network_message(net_data)
 
     def delete_network_postcommit(self, network_context):
-        LOG.debug('ML2_VPP: delete_network_postcommit, current network context is %s' % str(network_context.current))
+        LOG.debug('ML2_VPP: delete_network_postcommit, '
+                  'current network context is %s'
+                  % str(network_context.current))
         net_data = self.get_network_data(network_context)
         self.communicator.send_delete_network_message(net_data)
 
     def update_network_postcommit(self, network_context):
-        LOG.debug('ML2_VPP: update_network_postcommit, current network context is %s' % str(network_context.current))
+        LOG.debug('ML2_VPP: update_network_postcommit, '
+                  'current network context is %s'
+                  % str(network_context.current))
         net_data = self.get_network_data(network_context)
         self.communicator.send_update_network_message(net_data)
-
 
 
 class AgentCommunicator(object):
@@ -327,6 +330,7 @@ class AgentCommunicator(object):
 
     def bind(self, port, segment, host, bind_type):
         """Queue up a bind message for sending.
+
         This is called in the sequence of a REST call and should take
         as little time as possible.
         """
@@ -342,26 +346,30 @@ class AgentCommunicator(object):
 
         self.queue.put(['unbind', port, host])
 
-
     def send_bind(self, port, segment, host, bind_type):
         """Send the binding message out to VPP on the compute host"""
 
-        LOG.debug("ML2_VPP: Communicating bind request to agent for port:%(port)s, segment:%(segment)s"
+        LOG.debug("ML2_VPP: Communicating bind request to agent for "
+                  "port:%(port)s, segment:%(segment)s "
                   "on host:%(host)s, bind_type:%(bind_type)s",
                   {
-                  'port': port, 
-                  'segment': segment,
-                  'host': host, 
-                  'bind_type': bind_type
-                  } )
-        ##TODO(njoy) Implement an RPC call with request response to confirm that binding/unbinding has
-        ##been successful at the agent
+                      'port': port,
+                      'segment': segment,
+                      'host': host,
+                      'bind_type': bind_type
+                  })
+        # TODO(njoy) Implement an RPC call with request response to
+        # confirm that binding/unbinding has been successful at the
+        # agent
+
+        # NB segmentation_id is not optional in the wireline protocol,
+        # we just pass 0 for unsegmented network types
         data = {
             'host': host,
             'mac_address': port['mac_address'],
             'mtu': 1500,  # not this, but what?: port['mtu'],
             'network_type': segment[api.NETWORK_TYPE],
-            'segmentation_id': segment.get(api.SEGMENTATION_ID, 0), # 0 for unsegmented network types
+            'segmentation_id': segment.get(api.SEGMENTATION_ID, 0),
             'binding_type': bind_type,
             'network_id': port['network_id']
         }
@@ -374,7 +382,7 @@ class AgentCommunicator(object):
         # will wait until then.  For us this is useful beyond the usual
         # reasons of deplying the VM start until DHCP can be reached,
         # because we know the server socket is in place for the port.
-        
+
         self.notify_bound(self, port, host)
 
     def notify_bound(self, port, host):
@@ -398,13 +406,14 @@ class AgentCommunicator(object):
 
     def send_unbind(self, port, host, bind_type):
         """Send the unbinding message out to VPP on the compute host"""
-        LOG.debug("ML2_VPP: Communicating unbind request to agent for port:%(port)s,"
-                  "on host:%(host)s, bind_type:%(bind_type)s",
+        LOG.debug("ML2_VPP: Communicating unbind request to agent for "
+                  "port:%(port)s, on host:%(host)s, "
+                  "bind_type:%(bind_type)s",
                   {
-                  'port': port,
-                  'host': host,
-                  'bind_type': bind_type
-                  } )
+                      'port': port,
+                      'host': host,
+                      'bind_type': bind_type
+                  })
         data = {
             'host': host,
             'binding_type': bind_type,
@@ -413,8 +422,10 @@ class AgentCommunicator(object):
         LOG.debug("ML2_VPP: unbind urlfrag %s" % urlfrag)
         self._unicast_msg(urlfrag, data)
 
-    # TODO(ijw) previously we lazy-created networks, and probably should do again
-    # TODO(ijw) this method is not compatible with hierarchical port binding
+    # TODO(ijw) previously we lazy-created networks, and probably
+    # should do again.  This method is not compatible with
+    # hierarchical port binding
+
     def send_create_network_message(self, net_data):
         urlfrag = "networks/%s" % net_data['id']
         LOG.debug("ML2_VPP: create network urlfrag %s" % urlfrag)
@@ -429,10 +440,11 @@ class AgentCommunicator(object):
         urlfrag = "networks/%s" % net_data['id']
         LOG.debug("ML2_VPP: update network urlfrag %s" % urlfrag)
         self._broadcast_msg(urlfrag, net_data, 'PUT')
-    
+
     def _broadcast_msg(self, urlfrag, msg, msg_type):
         for url in self.agents:
-            LOG.debug("ML2_VPP: Sending message: %s %s to agent at:%s" % (msg_type, msg, url+urlfrag))
+            LOG.debug("ML2_VPP: Sending message: %s %s to agent at:%s"
+                      % (msg_type, msg, url + urlfrag))
             if msg_type == 'POST':
                 requests.post(url + urlfrag, data=msg)
             elif msg_type == 'DELETE':
@@ -449,11 +461,13 @@ class AgentCommunicator(object):
         hostname = msg['host']
         host_ip = socket.gethostbyname(hostname)
         LOG.debug("ML2_VPP: Agent host IP address: %s" % host_ip)
-        agts = [ agent for agent in self.agents if host_ip in agent ]
+        agts = [agent for agent in self.agents if host_ip in agent]
         if agts:
             url = agts[0]
-            LOG.debug("ML2_VPP: Sending message:%s to agent at:%s on host:%s" % (msg, url+urlfrag, host_ip))
+            LOG.debug("ML2_VPP: Sending message:%s to agent at:%s on host:%s"
+                      % (msg, url + urlfrag, host_ip))
             requests.put(url + urlfrag, data=msg)
         else:
-            LOG.warn("ML2_VPP: Messaging to agent failed.. because the hostIP:%s" \
-                     "is not found in the configured agent URL list" % host_ip)
+            LOG.warn("ML2_VPP: Messaging to agent failed.. because the "
+                     "hostIP:%s is not found in the configured agent URL list"
+                     % host_ip)
