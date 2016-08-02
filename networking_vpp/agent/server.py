@@ -96,8 +96,12 @@ class VPPForwarder(object):
         self.interfaces = {}    # uuid: if idx
 
     def get_vpp_ifidx(self, if_name):
-        """Return VPP's interface index value for the network interface"""
-        return self.vpp.get_interface(if_name).sw_if_index
+        """ Return VPP's interface index value for the network interface"""
+        if self.vpp.get_interface(if_name):
+            return self.vpp.get_interface(if_name).sw_if_index
+        else:
+            app.logger.error("Error obtaining interface data from vpp for interface:%s" % if_name)
+            return None
 
     def get_interface(self, physnet):
         return self.physnets.get(physnet, None)
@@ -108,10 +112,8 @@ class VPPForwarder(object):
         self.next_bridge_id += 1
         return x
 
-    # This, here, is us creating a FLAT, VLAN or VxLAN backed network
     def network_on_host(self, physnet, net_type, seg_id=None):
-        # TODO(najoy): Need to send a return value so the ML2 driver
-        # can raise an exception and prevent network creation
+        """Find or create a network of the type required"""
 
         if (physnet, net_type, seg_id) not in self.networks:
             self.create_network_on_host(physnet, net_type, seg_id)
@@ -167,14 +169,16 @@ class VPPForwarder(object):
             'segmentation_id': seg_id,
         }
 
+
     def delete_network_on_host(self, physnet, net_type, seg_id=None):
         net = self.networks.get((physnet, net_type, seg_id), None)
-
         if net is not None:
 
             self.vpp.delete_bridge_domain(net['bridge_domain_id'])
 
             # We leave the interface up.  Other networks may be using it
+        else:
+            app.logger.error("Delete Network: network UUID:%s is unknown to agent" % net_uuid)
 
     ########################################
     # stolen from LB driver
@@ -302,11 +306,18 @@ class VPPForwarder(object):
 
     def bind_interface_on_host(self, if_type, uuid, mac, physnet,
                                net_type, seg_id):
-        net = self.network_on_host(physnet, net_type, seg_id)
-        net_br_idx = net['bridge_domain_id']
+        # TODO(najoy): Need to send a return value so the ML2 driver
+        # can raise an exception and prevent network creation (when
+        # network_on_host returns None)
+
+        net_data = self.network_on_host(physnet, net_type, seg_id)
+        net_br_idx = net_data['bridge_domain_id']
         (iface_idx, props) = self.create_interface_on_host(if_type, uuid, mac)
         self.vpp.ifup(iface_idx)
         self.vpp.add_to_bridge(net_br_idx, iface_idx)
+        app.logger.debug('Bound vpp interface with sw_idx:%s on '
+                         'bridge domain:%s' 
+                         % (iface, net_br_idx))
         return props
 
     def unbind_interface_on_host(self, uuid):
