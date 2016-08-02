@@ -377,7 +377,7 @@ class AgentCommunicator(object):
         
         self.notify_bound(self, port, host)
 
-    def notify_bound(self, port, host)
+    def notify_bound(self, port, host):
         context = n_context.get_admin_context()
         plugin = manager.NeutronManager.get_plugin()
         # Bodge TODO(ijw)
