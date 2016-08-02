@@ -27,13 +27,12 @@
 # that work was not repeated here where the aim was to get the APIs
 # worked out.  The two codebases will merge in the future.
 
+import distro
 from flask import Flask
 from flask_restful import Api
 from flask_restful import reqparse
 from flask_restful import Resource
-import logging
 import os
-import distro
 import sys
 from threading import Thread
 import time
@@ -44,7 +43,6 @@ from neutron.agent.linux import bridge_lib
 from neutron.agent.linux import ip_lib
 from neutron.common import constants as n_const
 from oslo_config import cfg
-from oslo_log import log as logging
 
 ######################################################################
 
@@ -105,25 +103,11 @@ class VPPForwarder(object):
                  qemu_user=None,
                  qemu_group=None):
         self.vpp = vpp.VPPInterface(log)
-        # This is the list of flat network interfaces for providing
-        # FLAT networking
-        self.flat_if = flat_network_if.split(',')
-        # set of used upstream interfaces for flat networking
-        self.active_ifs = set()
 
         self.physnets = physnets
+
         self.qemu_user = qemu_user
         self.qemu_group = qemu_group
-
-        # TODO(ijw): these should actually be physical networks;
-        # named and indexed by name.  There's no distinction between
-        # 'flat' and 'trunk' interfaces, only the provider networks on top.
-
-        # This is the flat network interface for providing FLAT networking
-        self.flat_if = flat_network_if
-
-        # This is the trunk interface for VLAN networking
-        self.trunk_if = vlan_trunk_if
 
         # This is the address we'll use if we plan on broadcasting
         # vxlan packets
@@ -137,11 +121,12 @@ class VPPForwarder(object):
         self.interfaces = {}    # uuid: if idx
 
     def get_vpp_ifidx(self, if_name):
-        """ Return VPP's interface index value for the network interface"""
+        """Return VPP's interface index value for the network interface"""
         if self.vpp.get_interface(if_name):
             return self.vpp.get_interface(if_name).sw_if_index
         else:
-            app.logger.error("Error obtaining interface data from vpp for interface:%s" % if_name)
+            app.logger.error("Error obtaining interface data from vpp "
+                             "for interface:%s" % if_name)
             return None
 
     def get_interface(self, physnet):
@@ -210,7 +195,6 @@ class VPPForwarder(object):
             'segmentation_id': seg_id,
         }
 
-
     def delete_network_on_host(self, physnet, net_type, seg_id=None):
         net = self.networks.get((physnet, net_type, seg_id), None)
         if net is not None:
@@ -219,7 +203,8 @@ class VPPForwarder(object):
 
             # We leave the interface up.  Other networks may be using it
         else:
-            app.logger.error("Delete Network: network UUID:%s is unknown to agent" % net_uuid)
+            app.logger.error("Delete Network: network is unknown "
+                             "to agent")
 
     ########################################
     # stolen from LB driver
@@ -360,7 +345,7 @@ class VPPForwarder(object):
         self.vpp.add_to_bridge(net_br_idx, iface_idx)
         app.logger.debug('Bound vpp interface with sw_idx:%s on '
                          'bridge domain:%s'
-                         % (iface, net_br_idx))
+                         % (iface_idx, net_br_idx))
         return props
 
     def unbind_interface_on_host(self, uuid):
@@ -398,7 +383,8 @@ class VPPForwarder(object):
                         except Exception as exc:
                             app.logger.debug(exc)
             else:
-                app.logger.error('Unknown port type %s during unbind' % props['bind_type'])
+                app.logger.error('Unknown port type %s during unbind'
+                                 % props['bind_type'])
 
         # TODO(ijw): delete structures of newly unused networks with
         # delete_network
@@ -468,10 +454,6 @@ class PortUnbind(Resource):
 # Basic Flask RESTful app setup with logging
 app = Flask('vpp-agent')
 app.debug = True
-#ch = logging.StreamHandler()
-#formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
-#ch.setFormatter(formatter)
-#app.logger.addHandler(ch)
 app.logger.debug('Debug logging enabled')
 
 
@@ -501,10 +483,9 @@ def main():
                         physnets,
                         vxlan_src_addr=cfg.CONF.ml2_vpp.vxlan_src_addr,
                         vxlan_bcast_addr=cfg.CONF.ml2_vpp.vxlan_bcast_addr,
-                        vxlan_vrf=cfg.CONF.ml2_vpp.vxlan_vrf)
+                        vxlan_vrf=cfg.CONF.ml2_vpp.vxlan_vrf,
                         qemu_user=qemu_user,
                         qemu_group=qemu_group)
-
 
     api = Api(app)
     api.add_resource(PortBind, '/ports/<id>/bind')

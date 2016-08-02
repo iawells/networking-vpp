@@ -17,9 +17,8 @@ import eventlet.queue
 from oslo_config import cfg
 from oslo_log import log as logging
 import requests
-import socket
 import threading
-import socket
+
 from neutron.common import constants as n_const
 from neutron import context as n_context
 from neutron.extensions import portbindings
@@ -185,7 +184,8 @@ class VPPMechanismDriver(api.MechanismDriver):
         return True
 
     def physnet_known(self, physnet, network_type):
-        # TODO(ijw): this should be a range of physical networks the agents report in.
+        # TODO(ijw): this should be a range of physical networks the
+        # agents report in.
         return True
 
     def check_vlan_transparency(self, port_context):
@@ -305,9 +305,11 @@ class AgentCommunicator(object):
         LOG.debug("ML2_VPP: Queueing bind request for port:%(port)s, "
                   "segment:%(segment)s on host:%(host)s, type:%(type)s",
                   {
-                  'port': port, 'segment': segment,
-                  'host': host, 'type': binding_type
-                  } )
+                      'port': port,
+                      'segment': segment,
+                      'host': host,
+                      'type': binding_type
+                  })
         self.queue.put(['bind', port, segment, host, binding_type])
 
     def unbind(self, port, host):
@@ -320,9 +322,9 @@ class AgentCommunicator(object):
         LOG.debug("ML2_VPP: Queueing unbind request for port:%(port)s,"
                   "on host:%(host)s,",
                   {
-                  'port': port,
-                  'host': host
-                  } )
+                      'port': port,
+                      'host': host
+                  })
         self.queue.put(['unbind', port, host])
 
     def send_bind(self, port, segment, host, binding_type):
@@ -362,6 +364,9 @@ class AgentCommunicator(object):
         # reasons of deplying the VM start until DHCP can be reached,
         # because we know the server socket is in place for the port.
 
+        # TODO(njoy) Implement an RPC call with request response
+        # to confirm that binding/unbinding has been successful at
+        # the agent
         self.notify_bound(port, host)
 
     def notify_bound(self, port, host):
@@ -381,8 +386,6 @@ class AgentCommunicator(object):
             plugin.update_port_status(context, port['id'],
                                       n_const.PORT_STATUS_ACTIVE,
                                       host=host)
-            ##TODO(njoy) Implement an RPC call with request response to confirm that binding/unbinding has
-            ##been successful at the agent
             self.recursive = False
 
     def send_unbind(self, port, host):

@@ -19,6 +19,7 @@ import os
 import pwd
 import vpp_papi
 
+
 def mac_to_bytes(mac):
     return str(''.join(chr(int(x, base=16)) for x in mac.split(':')))
 
@@ -41,18 +42,19 @@ vpp_papi.register_event_callback(_vpp_cb)
 class VPPInterface(object):
 
     def _check_retval(self, t):
-    """See if VPP returned OK.
+        """See if VPP returned OK.
 
-    VPP is very inconsistent in return codes, so for now this reports
-    a logged warning rather than flagging an error.
-    """
+        VPP is very inconsistent in return codes, so for now this reports
+        a logged warning rather than flagging an error.
+        """
 
-    try:
-        self.LOG.debug("checking return value for object: %s" % str(t))
-        if t.retval != 0:
-            self.LOG.debug('FAIL? retval here is %s' % t.retval)
-    except AttributeError as e:
-        self.LOG.debug("Unexpected request format.  Error: %s on %s" % (e, t))
+        try:
+            self.LOG.debug("checking return value for object: %s" % str(t))
+            if t.retval != 0:
+                self.LOG.debug('FAIL? retval here is %s' % t.retval)
+        except AttributeError as e:
+            self.LOG.debug("Unexpected request format.  Error: %s on %s"
+                           % (e, t))
 
     def get_interfaces(self):
         t = vpp_papi.sw_interface_dump(0, b'ignored')
@@ -158,7 +160,7 @@ class VPPInterface(object):
 
     def create_vlan_subif(self, if_id, vlan_tag):
         self.LOG.debug("Creating vlan subinterface with ID:%s and vlan_tag:%s"
-              % (if_id, vlan_tag))
+                       % (if_id, vlan_tag))
         t = vpp_papi.create_vlan_subif(
             if_id,
             vlan_tag)
