@@ -124,7 +124,7 @@ class VPPInterface(object):
     ########################################
 
     def __init__(self, log):
-	self.LOG = log
+        self.LOG = log
         self.r = vpp_papi.connect("test_papi")
 
     def disconnect(self):

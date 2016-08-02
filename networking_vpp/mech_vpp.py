@@ -60,9 +60,9 @@ class VPPMechanismDriver(api.MechanismDriver):
         #Default vif type
         vif_type = 'vhostuser'
 
-	# We have to explicitly avoid binding agent ports - DHCP,
-	# L3 etc. - as vhostuser. The interface code below takes
-	# care of those.
+        # We have to explicitly avoid binding agent ports - DHCP,
+        # L3 etc. - as vhostuser. The interface code below takes
+        # care of those.
 
         owner = port_context.current['device_owner']
         for f in nl_const.DEVICE_OWNER_PREFIXES:
@@ -128,7 +128,7 @@ class VPPMechanismDriver(api.MechanismDriver):
             if self.check_segment(segment, port_context.host):
                 vif_details = dict(self.vif_details)
                 # TODO(ijw) should be in a library that the agent uses
-		vif_type = self.get_vif_type(port_context)
+                vif_type = self.get_vif_type(port_context)
                 if vif_type == 'vhostuser':
                     vif_details['vhostuser_socket'] = \
                         '/tmp/%s' % port_context.current['id']
@@ -178,8 +178,8 @@ class VPPMechanismDriver(api.MechanismDriver):
                      'physnet': physnet}
                 )
                 return False
-	else:
-	    return False # We don't support other types of network
+        else:
+            return False # We don't support other types of network
 
         return True
 
@@ -188,7 +188,7 @@ class VPPMechanismDriver(api.MechanismDriver):
         Support binding to arbitrary flat networks and a single Vlan physical network
         """
         if network_type == 'flat':
-	    # TODO(ijw): this should actually be checking physical networks both ways
+            # TODO(ijw): this should actually be checking physical networks both ways
             return True
         else:
             return physnet in self.physical_networks
@@ -238,7 +238,7 @@ class VPPMechanismDriver(api.MechanismDriver):
                           'bind_type': bind_type
                           }
                          )
-		# TODO get the physical network
+                # TODO get the physical network
                 self.communicator.bind(port_context.current,
                                        current_bind[api.BOUND_SEGMENT],
                                        port_context.host,
@@ -344,7 +344,7 @@ class AgentCommunicator(object):
 
 
     def send_bind(self, port, segment, host, bind_type):
-	"""Send the binding message out to VPP on the compute host"""
+        """Send the binding message out to VPP on the compute host"""
 
         LOG.debug("ML2_VPP: Communicating bind request to agent for port:%(port)s, segment:%(segment)s"
                   "on host:%(host)s, bind_type:%(bind_type)s",
@@ -374,8 +374,8 @@ class AgentCommunicator(object):
         # will wait until then.  For us this is useful beyond the usual
         # reasons of deplying the VM start until DHCP can be reached,
         # because we know the server socket is in place for the port.
-	
-	self.notify_bound(self, port, host)
+        
+        self.notify_bound(self, port, host)
 
     def notify_bound(self, port, host)
         context = n_context.get_admin_context()
@@ -397,7 +397,7 @@ class AgentCommunicator(object):
             self.recursive = False
 
     def send_unbind(self, port, host, bind_type):
-	"""Send the unbinding message out to VPP on the compute host"""
+        """Send the unbinding message out to VPP on the compute host"""
         LOG.debug("ML2_VPP: Communicating unbind request to agent for port:%(port)s,"
                   "on host:%(host)s, bind_type:%(bind_type)s",
                   {
@@ -431,18 +431,18 @@ class AgentCommunicator(object):
         self._broadcast_msg(urlfrag, net_data, 'PUT')
     
     def _broadcast_msg(self, urlfrag, msg, msg_type):
-	for url in self.agents:
-	    LOG.debug("ML2_VPP: Sending message: %s %s to agent at:%s" % (msg_type, msg, url+urlfrag))
-	    if msg_type == 'POST':
+        for url in self.agents:
+            LOG.debug("ML2_VPP: Sending message: %s %s to agent at:%s" % (msg_type, msg, url+urlfrag))
+            if msg_type == 'POST':
                 requests.post(url + urlfrag, data=msg)
-	    elif msg_type == 'DELETE':
+            elif msg_type == 'DELETE':
                 requests.delete(url + urlfrag, data=msg)
-	    elif msg_type == 'PUT':
+            elif msg_type == 'PUT':
                 requests.put(url + urlfrag, data=msg)
-	    else:
-		LOG.error("ML2_VPP: Unknown message type:%s" % msg_type)
-		# Will never work, just skip
-		break
+            else:
+                LOG.error("ML2_VPP: Unknown message type:%s" % msg_type)
+                # Will never work, just skip
+                break
 
     def _unicast_msg(self, urlfrag, msg):
         # Send unicast message to the agent running on the host

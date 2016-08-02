@@ -323,7 +323,7 @@ class VPPForwarder(object):
             app.logger.debug("unknown port %s unbinding request - ignored" % uuid)
         else:
             iface_idx, props = self.interfaces[uuid]
-	    # TODO(ijw): stop checking, just unbind what we know it to be (and lose the argument)
+            # TODO(ijw): stop checking, just unbind what we know it to be (and lose the argument)
             if if_type != props['bind_type']:
                 app.logger.error("Incorrect unbinding port type:%s request received" % if_type)
                 app.logger.error("Expected type:%s, Received Type:%s" % (props['bind_type'], if_type))
