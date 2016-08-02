@@ -77,8 +77,9 @@ class VPPInterface(object):
     ########################################
 
     def create_tap(self, ifname, mac):
+        # (we don't like unicode in VPP hence str(ifname))
         t = vpp_papi.tap_connect(False,  # random MAC
-                                 str(ifname),  # (we don't like unicode)
+                                 str(ifname),
                                  mac_to_bytes(mac),
                                  False,  # renumber - who knows, no doc
                                  0)  # customdevinstance - who knows, no doc
@@ -116,8 +117,7 @@ class VPPInterface(object):
         return t.sw_if_index
 
     def delete_vhostuser(self, idx):
-        # LOG.debug("Deleting VPP interface - index: %s" % idx)
-        print("Deleting VPP interface - index: %s" % idx)
+        LOG.debug("Deleting VPP interface - index: %s" % idx)
         t = vpp_papi.delete_vhost_user_if(idx)
 
         _check_retval(t)
@@ -167,19 +167,18 @@ class VPPInterface(object):
 
         return t.sw_if_index
 
-#     def create_srcrep_vxlan_subif(self, vrf_id, src_addr, bcast_addr, vnid):
-#         t = vpp_papi.vxlan_add_del_tunnel(
-#             True,  # is_add
-#             src_addr,
-#             bcast_addr,
-#             vrf_id,
-#             decap_next_index,   # what is this?
-#             vni)
-
-        _check_retval(t)
-
-        return t.sw_if_index
-
+#    def create_srcrep_vxlan_subif(self, vrf_id, src_addr, bcast_addr, vnid):
+#        t = vpp_papi.vxlan_add_del_tunnel(
+#            True,  # is_add
+#            src_addr,
+#            bcast_addr,
+#            vrf_id,
+#            decap_next_index,   # what is this?
+#            vni)
+#
+#        _check_retval(t)
+#
+#        return t.sw_if_index
     ########################################
 
     def add_to_bridge(self, bridx, *ifidxes):
