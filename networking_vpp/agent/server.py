@@ -28,14 +28,14 @@
 # worked out.  The two codebases will merge in the future.
 
 import distro
-from flask import Flask
-from flask_restful import Api
-from flask_restful import reqparse
-from flask_restful import Resource
+import etcd
+import json
 import os
+import re
 import sys
 from threading import Thread
 import time
+import traceback
 import vpp
 
 from networking_vpp import config_opts
@@ -43,6 +43,9 @@ from neutron.agent.linux import bridge_lib
 from neutron.agent.linux import ip_lib
 from neutron.common import constants as n_const
 from oslo_config import cfg
+from oslo_log import log as logging
+
+LOG = logging.getLogger(__name__)
 
 ######################################################################
 
@@ -71,9 +74,7 @@ def get_distro_family():
     else:
         return distro.id()
 
-
 def get_qemu_default():
-    # TODO(ijw): this should be moved to the devstack code
     distro = get_distro_family()
     if distro == 'redhat':
         qemu_user = 'qemu'
@@ -95,14 +96,14 @@ def get_qemu_default():
 
 class VPPForwarder(object):
 
-    def __init__(self, log,
+    def __init__(self,
                  physnets,  # physnet_name: interface-name
                  vxlan_src_addr=None,
                  vxlan_bcast_addr=None,
                  vxlan_vrf=None,
                  qemu_user=None,
                  qemu_group=None):
-        self.vpp = vpp.VPPInterface(log)
+        self.vpp = vpp.VPPInterface(LOG)
 
         self.physnets = physnets
 
@@ -125,7 +126,7 @@ class VPPForwarder(object):
         if self.vpp.get_interface(if_name):
             return self.vpp.get_interface(if_name).sw_if_index
         else:
-            app.logger.error("Error obtaining interface data from vpp "
+            LOG.error("Error obtaining interface data from vpp "
                              "for interface:%s" % if_name)
             return None
 
@@ -148,7 +149,7 @@ class VPPForwarder(object):
     def create_network_on_host(self, physnet, net_type, seg_id):
         intf = self.get_interface(physnet)
         if intf is None:
-            app.logger.error("Error: no physnet found")
+            LOG.error("Error: no physnet found")
             return None
 
         ifidx = self.get_vpp_ifidx(intf)
@@ -161,14 +162,15 @@ class VPPForwarder(object):
         if net_type == 'flat':
             if_upstream = ifidx
 
-            app.logger.debug('Adding upstream interface-idx:%s-%s to bridge '
+            LOG.debug('Adding upstream interface-idx:%s-%s to bridge '
                              'for flat networking' % (intf, if_upstream))
 
         elif net_type == 'vlan':
             self.vpp.ifup(ifidx)
 
-            app.logger.debug('Adding upstream trunk interface:%s.%s \
-            to bridge for vlan networking' % (intf, seg_id))
+            LOG.debug('Adding upstream trunk interface:%s.%s '
+                      'to bridge for vlan networking' % (intf, seg_id))
+
             if_upstream = self.vpp.create_vlan_subif(ifidx,
                                                      seg_id)
 
@@ -203,7 +205,7 @@ class VPPForwarder(object):
 
             # We leave the interface up.  Other networks may be using it
         else:
-            app.logger.error("Delete Network: network is unknown "
+            LOG.error("Delete Network: network is unknown "
                              "to agent")
 
     ########################################
@@ -263,14 +265,14 @@ class VPPForwarder(object):
         found = False
         while wait_time > 0:
             if ip_lib.device_exists(device_name):
-                app.logger.debug('External tap device %s found!'
+                LOG.debug('External tap device %s found!'
                                  % device_name)
-                app.logger.debug('Bridging tap interface %s on %s'
+                LOG.debug('Bridging tap interface %s on %s'
                                  % (device_name, bridge_name))
                 if not bridge.owns_interface(device_name):
                     bridge.addif(device_name)
                 else:
-                    app.logger.debug('Interface: %s is already added '
+                    LOG.debug('Interface: %s is already added '
                                      'to the bridge %s' %
                                      (device_name, bridge_name))
                 found = True
@@ -279,14 +281,14 @@ class VPPForwarder(object):
                 time.sleep(2)
                 wait_time -= 2
         if not found:
-            app.logger.error('Failed waiting for external tap device:%s'
+            LOG.error('Failed waiting for external tap device:%s'
                              % device_name)
 
     def create_interface_on_host(self, if_type, uuid, mac):
         if uuid in self.interfaces:
-            app.logger.debug('port %s repeat binding request - ignored' % uuid)
+            LOG.debug('port %s repeat binding request - ignored' % uuid)
         else:
-            app.logger.debug('binding port %s as type %s' %
+            LOG.debug('binding port %s as type %s' %
                              (uuid, if_type))
 
             # TODO(ijw): naming not obviously consistent with
@@ -297,19 +299,18 @@ class VPPForwarder(object):
 
             if if_type == 'maketap' or if_type == 'plugtap':
                 if if_type == 'maketap':
-                    iface = self.vpp.create_tap(tap_name, mac)
-                    props = {'bind_type': 'maketap', 'name': tap_name}
+                    iface_idx = self.vpp.create_tap(tap_name, mac)
+                    props = {'name': tap_name}
                 else:
                     int_tap_name = 'vpp' + name
 
-                    props = {'bind_type': 'plugtap',
-                             'bridge_name': bridge_name,
+                    props = {'bridge_name': bridge_name,
                              'ext_tap_name': tap_name,
                              'int_tap_name': int_tap_name}
 
-                    app.logger.debug('Creating tap interface %s with mac %s'
+                    LOG.debug('Creating tap interface %s with mac %s'
                                      % (int_tap_name, mac))
-                    iface = self.vpp.create_tap(int_tap_name, mac)
+                    iface_idx = self.vpp.create_tap(int_tap_name, mac)
                     # TODO(ijw): someone somewhere ought to be sorting
                     # the MTUs out
                     br = self.ensure_bridge(bridge_name)
@@ -324,12 +325,15 @@ class VPPForwarder(object):
                         br.addif(int_tap_name)
             elif if_type == 'vhostuser':
                 path = get_vhostuser_name(uuid)
-                iface = self.vpp.create_vhostuser(path, mac, self.qemu_user,
-                                                  self.qemu_group)
-                props = {'bind_type': 'vhostuser', 'path': uuid}
+                iface_idx = self.vpp.create_vhostuser(path, mac, self.qemu_user,
+                                                      self.qemu_group)
+                props = {'path': path}
             else:
                 raise Exception('unsupported interface type')
-            self.interfaces[uuid] = (iface, props)
+            props['bind_type'] = if_type
+            props['iface_idx'] = iface_idx
+            props['mac'] = mac
+            self.interfaces[uuid] = props
         return self.interfaces[uuid]
 
     def bind_interface_on_host(self, if_type, uuid, mac, physnet,
@@ -340,22 +344,25 @@ class VPPForwarder(object):
 
         net_data = self.network_on_host(physnet, net_type, seg_id)
         net_br_idx = net_data['bridge_domain_id']
-        (iface_idx, props) = self.create_interface_on_host(if_type, uuid, mac)
+        props = self.create_interface_on_host(if_type, uuid, mac)
+	iface_idx = props['iface_idx']
         self.vpp.ifup(iface_idx)
         self.vpp.add_to_bridge(net_br_idx, iface_idx)
-        app.logger.debug('Bound vpp interface with sw_idx:%s on '
+	props['net_data'] = net_data
+        LOG.debug('Bound vpp interface with sw_idx:%s on '
                          'bridge domain:%s'
                          % (iface_idx, net_br_idx))
         return props
 
     def unbind_interface_on_host(self, uuid):
         if uuid not in self.interfaces:
-            app.logger.debug('unknown port %s unbinding request - ignored'
+            LOG.debug('unknown port %s unbinding request - ignored'
                              % uuid)
         else:
-            iface_idx, props = self.interfaces[uuid]
+            props = self.interfaces[uuid]
+	    iface_idx = props['iface_idx']
 
-            app.logger.debug('unbinding port %s, recorded as type %s'
+            LOG.debug('unbinding port %s, recorded as type %s'
                              % (uuid, props['bind_type']))
 
             # We no longer need this interface.  Specifically if it's
@@ -381,9 +388,9 @@ class VPPForwarder(object):
                             bridge.link.set_down()
                             bridge.delbr()
                         except Exception as exc:
-                            app.logger.debug(exc)
+                            LOG.debug(exc)
             else:
-                app.logger.error('Unknown port type %s during unbind'
+                LOG.error('Unknown port type %s during unbind'
                                  % props['bind_type'])
 
         # TODO(ijw): delete structures of newly unused networks with
@@ -392,69 +399,111 @@ class VPPForwarder(object):
 
 ######################################################################
 
-class PortBind(Resource):
-    bind_args = reqparse.RequestParser()
-    bind_args.add_argument('mac_address', type=str, required=True)
-    bind_args.add_argument('mtu', type=str, required=True)
-    bind_args.add_argument('physnet', type=str, required=True)
-    bind_args.add_argument('network_type', type=str, required=True)
-    # This will be called as 0 if the network is flat and has no
-    # segments
-    bind_args.add_argument('segmentation_id', type=int, required=True)
-    bind_args.add_argument('host', type=str, required=True)
-    bind_args.add_argument('binding_type', type=str, required=True)
+LEADIN = '/networking-vpp'  # TODO: make configurable?
+class EtcdListener(object):
+    def __init__(self, host, etcd_client, vppf, physnets):
+	self.host = host
+	self.etcd_client = etcd_client
+	self.vppf = vppf
+	self.physnets = physnets
 
-    def __init(self, *args, **kwargs):
-        super('PortBind', self).__init__(*args, **kwargs)
+	# We need certain directories to exist
+	self.mkdir(LEADIN + '/state/%s/ports' % self.host)
+	self.mkdir(LEADIN + '/nodes/%s/ports' % self.host)
 
-    def put(self, id):
-        id = str(id)  # comes in as unicode
+    def mkdir(self, path):
+	try:
+	    self.etcd_client.write(path, None, dir=True)
+	except etcd.EtcdNotFile:
+	    # Thrown when the directory already exists, which is fine
+	    pass
 
-        global vppf
-        args = self.bind_args.parse_args()
-        app.logger.debug("on host %s, binding %s %s %d to mac %s port id %s "
-                         "as binding_type %s"
-                         % (args['host'],
-                            args['physnet'],
-                            args['network_type'],
-                            args['segmentation_id'],
-                            args['mac_address'],
-                            id,
-                            args['binding_type'])
-                         )
-        if args['binding_type'] in ('vhostuser', 'plugtap'):
-            app.logger.debug('Creating a vhostuser port:%s binding on host %s'
-                             % (id, args['host']))
-            vppf.bind_interface_on_host(args['binding_type'],
-                                        id,
-                                        args['mac_address'],
-                                        args['physnet'],
-                                        args['network_type'],
-                                        args['segmentation_id'])
-        else:
-            app.logger.error('Unsupported binding type :%s requested'
-                             % args['binding_type'])
+    def repop_interfaces(self):
+	pass
 
+    # The vppf bits
 
-class PortUnbind(Resource):
-    bind_args = reqparse.RequestParser()
-    bind_args.add_argument('host', type=str, required=True)
+    def unbind(self, id):
+	self.vppf.unbind_interface_on_host(id)
 
-    def __init(self, *args, **kwargs):
-        super('PortUnbind', self).__init__(*args, **kwargs)
+    def bind(self, id, binding_type, mac_address, physnet, network_type,
+	     segmentation_id):
+	# args['binding_type'] in ('vhostuser', 'plugtap'):
+	return self.vppf.bind_interface_on_host(binding_type,
+					 id,
+					 mac_address,
+					 physnet,
+					 network_type,
+					 segmentation_id)
 
-    def put(self, id):
-        global vppf
-        args = self.bind_args.parse_args()
-        app.logger.debug('on host %s, unbinding port ID:%s'
-                         % (args['host'], id))
-        vppf.unbind_interface_on_host(id)
+    HEARTBEAT = 60 # seconds
+    def process_ops(self):
+	# TODO(ijw): needs to remember its last tick on reboot, or
+	# reconfigure from start (which means that VPP needs it
+	# storing, so it's lost on reboot of VPP)
+	physnets = self.physnets.keys()
+        for f in physnets:
+	    self.etcd_client.write(LEADIN + '/state/%s/physnets/%s' % (self.host, f), 1)
 
+	tick = None
+	while True:
 
-# Basic Flask RESTful app setup with logging
-app = Flask('vpp-agent')
-app.debug = True
-app.logger.debug('Debug logging enabled')
+	    # The key that indicates to people that we're alive
+	    # (not that they care)
+	    self.etcd_client.write(LEADIN + '/state/%s/alive' % self.host,
+				   1, ttl=3*self.HEARTBEAT)
+
+	    try:
+		LOG.error("ML2_VPP(%s): thread pausing"
+			  % self.__class__.__name__)
+		rv = self.etcd_client.watch(LEADIN + "/nodes/%s/ports" % self.host,
+					    recursive=True,
+					    index=tick,
+					    timeout=self.HEARTBEAT)
+		LOG.error('watch received %s on %s at tick %s',
+			  rv.action, rv.key, rv.modifiedIndex)
+		tick = rv.modifiedIndex+1
+		LOG.error("ML2_VPP(%s): thread active"
+			  % self.__class__.__name__)
+
+		# Matches a port key, gets host and uuid
+		m = re.match(LEADIN + '/nodes/%s/ports/([^/]+)$' % self.host, rv.key)
+
+		if m:
+		    port = m.group(1)
+
+		    if rv.action == 'delete':
+			# Removing key == desire to unbind
+			self.unbind(port)
+			try:
+			    self.etcd_client.delete(LEADIN + '/state/%s/ports/%s'
+						    % (self.host, port))
+			except etcd.EtcdKeyNotFound:
+			    # Gone is fine, if we didn't delete it it's no problem
+			    pass
+		    else:
+			# Create or update == bind
+			data = json.loads(rv.value)
+			props = self.bind(port,
+					  data['binding_type'],
+					  data['mac_address'],
+					  data['physnet'],
+					  data['network_type'],
+					  data['segmentation_id'])
+			self.etcd_client.write(LEADIN + '/state/%s/ports/%s'
+					       % (self.host, port), json.dumps(props))
+
+		else:
+		    LOG.warn('Unexpected key change in etcd port feedback')
+
+	    except etcd.EtcdWatchTimedOut:
+		# This is normal
+		pass
+	    except Exception, e:
+		LOG.error('etcd threw exception %s' % traceback.format_exc(e))
+		time.sleep(1) # TODO(ijw): prevents tight crash loop, but adds latency
+		# Should be specific to etcd faults, should have sensible behaviour
+		# Don't just kill the thread...
 
 
 def main():
@@ -467,30 +516,29 @@ def main():
     qemu_group = cfg.CONF.ml2_vpp.qemu_group
     default_user, default_group = get_qemu_default()
     if not qemu_user:
-        qemu_user = default_user
+	qemu_user = default_user
     if not qemu_group:
-        qemu_group = default_group
-
-    global vppf
+	qemu_group = default_group
 
     physnet_list = cfg.CONF.ml2_vpp.physnets.replace(' ', '').split(',')
     physnets = {}
     for f in physnet_list:
-        (k, v) = f.split(':')
-        physnets[k] = v
+	(k, v) = f.split(':')
+	physnets[k] = v
 
-    vppf = VPPForwarder(app.logger,
-                        physnets,
-                        vxlan_src_addr=cfg.CONF.ml2_vpp.vxlan_src_addr,
-                        vxlan_bcast_addr=cfg.CONF.ml2_vpp.vxlan_bcast_addr,
-                        vxlan_vrf=cfg.CONF.ml2_vpp.vxlan_vrf,
-                        qemu_user=qemu_user,
-                        qemu_group=qemu_group)
+    vppf = VPPForwarder(physnets,
+			vxlan_src_addr=cfg.CONF.ml2_vpp.vxlan_src_addr,
+			vxlan_bcast_addr=cfg.CONF.ml2_vpp.vxlan_bcast_addr,
+			vxlan_vrf=cfg.CONF.ml2_vpp.vxlan_vrf,
+			qemu_user=qemu_user,
+			qemu_group=qemu_group)
 
-    api = Api(app)
-    api.add_resource(PortBind, '/ports/<id>/bind')
-    api.add_resource(PortUnbind, '/ports/<id>/unbind')
-    app.run(host='0.0.0.0', port=2704)
+    etcd_client = etcd.Client()  # TODO(ijw): args
+
+    ops = EtcdListener(cfg.CONF.host, etcd_client, vppf, physnets)
+
+    ops.process_ops()
+
 
 if __name__ == '__main__':
     main()
