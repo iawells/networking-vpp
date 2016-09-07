@@ -17,6 +17,22 @@ Host Setup
     In file ``/etc/libvirt/qemu.conf``, set user and group to root, and check
     the path of the hugepages
 
+ #. Install etcd and configure etcd::
+
+      yum install -y etcd
+
+    The file ``/etc/etcd/etcd.conf`` should contains::
+
+      ETCD_NAME=default
+      ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
+      ETCD_LISTEN_CLIENT_URLS="http://localhost:4001"
+      ETCD_ADVERTISE_CLIENT_URLS="http://localhost:4001"
+
+ #. Enable etcd::
+
+      systemctl enable etcd
+      systemctl start etcd
+
 
 VPP build and install
 ~~~~~~~~~~~~~~~~~~~~~
