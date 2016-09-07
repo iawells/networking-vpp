@@ -69,7 +69,10 @@ function pre_install_vpp_agent {
 }
 
 function install_vpp_agent {
-    :
+    iniset $NOVA_CONF DEFAULT reserved_host_memory_mb 1024
+    iniset $NOVA_CONF DEFAULT cpu_allocation_ratio 1.0
+    iniset $NOVA_CONF DEFAULT ram_allocation_ratio 1.0
+    iniset $NOVA_CONF libvirt cpu_mode 'host-model'
 }
 
 function init_vpp_agent {
