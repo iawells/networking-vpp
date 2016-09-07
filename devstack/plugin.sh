@@ -34,6 +34,10 @@ function configure_vpp {
     iniset /$Q_PLUGIN_CONF_FILE ml2_vpp agents $MECH_VPP_AGENTLIST
     iniset /$Q_PLUGIN_CONF_FILE ml2_vpp physnets $MECH_VPP_PHYSNETLIST
 
+    if [ ! -z "$MECH_VPP_DEBUG" ] ; then
+        iniset /$Q_PLUGIN_CONF_FILE ml2_vpp debug True
+    fi
+
     if [ ! -z "$VXLAN_SRC_ADDR" ] ; then
 	iniset /$Q_PLUGIN_CONF_FILE ml2_vpp vxlan_src_addr $VXLAN_SRC_ADDR
     fi

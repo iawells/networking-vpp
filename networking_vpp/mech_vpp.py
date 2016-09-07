@@ -44,6 +44,9 @@ vpp_opts = [
     cfg.StrOpt('agents',
                help=_("Name=HTTP URL mapping list of agents on compute "
                       "nodes.")),
+    cfg.BoolOpt('debug',
+                default=False,
+                help='Enable or disable debug logging'),
 ]
 
 cfg.CONF.register_opts(vpp_opts, "ml2_vpp")
