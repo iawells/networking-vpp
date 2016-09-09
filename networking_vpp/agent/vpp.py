@@ -89,6 +89,7 @@ class VPPInterface(object):
         return t.sw_if_index  # will be -1 on failure (e.g. 'already exists')
 
     def delete_tap(self, idx):
+        self.LOG.debug("Deleting VPP tap interface - index: %s" % idx)
         vpp_papi.tap_delete(idx)
 
         # Err, I just got a sw_interface_set_flags here, not a delete tap?
@@ -120,7 +121,7 @@ class VPPInterface(object):
         return t.sw_if_index
 
     def delete_vhostuser(self, idx):
-        self.LOG.debug("Deleting VPP interface - index: %s" % idx)
+        self.LOG.debug("Deleting VPP vhostuser interface - index: %s" % idx)
         t = vpp_papi.delete_vhost_user_if(idx)
 
         self._check_retval(t)
