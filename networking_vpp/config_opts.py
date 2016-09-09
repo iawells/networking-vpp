@@ -30,6 +30,9 @@ vpp_opts = [
                help=_("QEMU user. Leave blank for default user")),
     cfg.StrOpt('qemu_group',
                help=_("QEMU group. Leave blank for default group")),
+    cfg.BoolOpt('debug',
+                default=False,
+                help='Enable or disable debug logging.'),
 ]
 
 cfg.CONF.register_opts(vpp_opts, "ml2_vpp")

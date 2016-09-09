@@ -44,6 +44,9 @@ vpp_opts = [
     cfg.StrOpt('agents',
                help=_("Name=HTTP URL mapping list of agents on compute "
                       "nodes.")),
+    cfg.BoolOpt('debug',
+                default=False,
+                help='Enable or disable debug logging'),
 ]
 
 cfg.CONF.register_opts(vpp_opts, "ml2_vpp")
@@ -273,7 +276,7 @@ class VPPMechanismDriver(api.MechanismDriver):
                 self.communicator.kick()
 
 
-    def delete_port_precommit(self, port_context):
+    def delete_port_postcommit(self, port_context):
         port = port_context.current
         host = port_context.host
         LOG.debug('ML2_VPP: delete_port_postcommit, port is %s' % str(port))
@@ -281,6 +284,9 @@ class VPPMechanismDriver(api.MechanismDriver):
                                  port, host)
 
     def delete_port_precommit(self, port_context):
+        port = port_context.current
+        host = port_context.host
+        LOG.debug('ML2_VPP: delete_port_precommit, port is %s' % str(port))
         self.communicator.kick()
 
 @six.add_metaclass(ABCMeta)
@@ -455,7 +461,10 @@ class EtcdAgentCommunicator(AgentCommunicator):
             # not needed? - do_etcd_mkdir('/'.join(k.split('/')[:-1]))
             if v is None:
                 LOG.error('deleting key %s' % k)
-                self.etcd_client.delete(k)
+                try:
+                    self.etcd_client.delete(k)
+                except etcd.EtcdKeyNotFound:
+                    pass
             else:
                 LOG.error('writing key %s' % k)
                 self.etcd_client.write(k, json.dumps(v))
@@ -481,7 +490,7 @@ class EtcdAgentCommunicator(AgentCommunicator):
                     if self.do_etcd_update(k, v):
                         return True
                     else:
-                        os.sleep(1) # something went bad; breathe, in
+                        time.sleep(1) # something went bad; breathe, in
                                     # case we end up in a tight loop
                         return False
 

@@ -13,6 +13,27 @@ Host Setup
     ``default_hugepagesz=2M hugepagesz=2M hugepages=2048 iommu=pt
     intel_iommu=on``
 
+ #. Configure libvirtd to run qemu as root:
+    In file ``/etc/libvirt/qemu.conf``, set user and group to root, and check
+    the path of the hugepages
+
+ #. Install etcd and configure etcd::
+
+      yum install -y etcd
+
+    The file ``/etc/etcd/etcd.conf`` should contains::
+
+      ETCD_NAME=default
+      ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
+      ETCD_LISTEN_CLIENT_URLS="http://localhost:4001"
+      ETCD_ADVERTISE_CLIENT_URLS="http://localhost:4001"
+
+ #. Enable etcd::
+
+      systemctl enable etcd
+      systemctl start etcd
+
+
 VPP build and install
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -42,9 +63,22 @@ VPP build and install
 
     * Build and install::
 
-        make -Cbuild-root PLATFORM=vpp TAG=vpp_debug vpp-api-install
+        make build-vpp-api
         cd vpp-api/python
         sudo python setup.py install
+
+    * Copy missing files::
+
+        cp ./build-root/install-vpp_debug-native/vpp/vpp-api/vpe.py /usr/lib/python2.7/site-packages/vpp_papi-1.1-py2.7.egg/vpp_papi/
+        cp ./build-root/install-vpp_debug-native/vlib-api/vlibmemory/memclnt.py /usr/lib/python2.7/site-packages/vpp_papi-1.1-py2.7.egg/vpp_papi/
+        cp ./build-root/build-vpp_debug-native/vpp-api/python/.libs/*.so* /usr/lib/python2.7/site-packages/vpp_papi-1.1-py2.7.egg/vpp_papi/
+        replace in file /usr/lib/python2.7/site-packages/vpp_papi-1.1-py2.7.egg/vpp_papi/vpp_papi.py 
+            "vpe = sys.modules['vpe']" by "import vpe"
+
+     * Check vpp_papi is correctly installed::
+
+         python
+         >> import vpp_papi  <-- should not raise any exception      
 
  #. Configuring VPP
 
@@ -52,10 +86,15 @@ VPP build and install
     than the default 5000, as it is used by keystone. This can be done by
     adding line ``cli-listen localhost:5002`` in ``unix`` section of VPP
     config file ``/etc/vpp/startup.conf``.
+ 
+    Add a line corresponding to your external NIC in the ``dpdk`` section,
+    and limit the amount of memory taken by VPP::
 
-    It is necessary to load pmd kernel module of choice (vfio-pci, igb_uio,
-    etc). igb_uio module can be found in dpdk build directory:
-    ``build-root/install-vpp-native/dpdk/kmod/igb_uio.ko``
+        dpdk {
+            socket-mem 1024
+            uio-driver uio_pci_generic
+            dev 0002:05:00.0
+        }
 
  #. Starting VPP
 
@@ -135,9 +174,25 @@ Add the following to local.conf::
   Q_ML2_PLUGIN_MECHANISM_DRIVERS=vpp
   Q_ML2_PLUGIN_TYPE_DRIVERS=vlan
   VLAN_TRUNK_IF='GigabitEthernet2/5/0'
+  MECH_VPP_PHYSNETLIST=physnet:GigabitEthernet2/5/0
+  MECH_VPP_AGENTLIST=localhost
+  QEMU_USER=root
+  QEMU_GROUP=root
+  NEUTRON_CREATE_INITIAL_NETWORKS=False
+  
 
-Note that ``VLAN_TRUNK_IF`` should be set to the interface name in VPP that you
+Note that ``VLAN_TRUNK_IF`` and ``MECH_VPP_PHYSNETLIST`` should be set to the interface name in VPP that you
 want to use as your trunk interface.
+
+
+Network creation
+~~~~~~~~~~~
+As the variable ``NEUTRON_CREATE_INITIAL_NETWORKS`` is set to ``False``, we have to create
+manually the private network::
+  source openrc admin admin
+  neutron net-create --tenant-id admin --provider:network_type vlan --provider:physical_network physnet private
+  neutron subnet-create --tenant-id admin --name sub_private --gateway 192.168.78.1 --enable-dhcp --ip-version 4 private 192.168.78.0/24
+
 
 VM creation
 ~~~~~~~~~~~
