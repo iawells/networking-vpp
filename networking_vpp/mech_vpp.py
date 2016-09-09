@@ -276,7 +276,7 @@ class VPPMechanismDriver(api.MechanismDriver):
                 self.communicator.kick()
 
 
-    def delete_port_precommit(self, port_context):
+    def delete_port_postcommit(self, port_context):
         port = port_context.current
         host = port_context.host
         LOG.debug('ML2_VPP: delete_port_postcommit, port is %s' % str(port))
@@ -284,6 +284,9 @@ class VPPMechanismDriver(api.MechanismDriver):
                                  port, host)
 
     def delete_port_precommit(self, port_context):
+        port = port_context.current
+        host = port_context.host
+        LOG.debug('ML2_VPP: delete_port_precommit, port is %s' % str(port))
         self.communicator.kick()
 
 @six.add_metaclass(ABCMeta)
