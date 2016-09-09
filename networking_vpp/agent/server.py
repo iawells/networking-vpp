@@ -510,6 +510,13 @@ class EtcdListener(object):
 
 def main():
     cfg.CONF(sys.argv[1:])
+    if cfg.CONF.ml2_vpp.debug:
+        extra_default_log_levels = ['%s=DEBUG' % __name__]
+    else:
+        extra_default_log_levels = ['%s=WARN' % __name__]
+    loglevels =  logging.get_default_log_levels() + extra_default_log_levels
+    logging.set_defaults(default_log_levels=loglevels)
+    logging.setup(cfg.CONF, __name__)
 
     # If the user and/or group are specified in config file, we will use
     # them as configured; otherwise we try to use defaults depending on

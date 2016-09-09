@@ -34,6 +34,10 @@ function configure_vpp {
     iniset /$Q_PLUGIN_CONF_FILE ml2_vpp agents $MECH_VPP_AGENTLIST
     iniset /$Q_PLUGIN_CONF_FILE ml2_vpp physnets $MECH_VPP_PHYSNETLIST
 
+    if [ ! -z "$MECH_VPP_DEBUG" ] ; then
+        iniset /$Q_PLUGIN_CONF_FILE ml2_vpp debug True
+    fi
+
     if [ ! -z "$VXLAN_SRC_ADDR" ] ; then
 	iniset /$Q_PLUGIN_CONF_FILE ml2_vpp vxlan_src_addr $VXLAN_SRC_ADDR
     fi
@@ -69,7 +73,10 @@ function pre_install_vpp_agent {
 }
 
 function install_vpp_agent {
-    :
+    iniset $NOVA_CONF DEFAULT reserved_host_memory_mb 1024
+    iniset $NOVA_CONF DEFAULT cpu_allocation_ratio 1.0
+    iniset $NOVA_CONF DEFAULT ram_allocation_ratio 1.0
+    iniset $NOVA_CONF libvirt cpu_mode 'host-model'
 }
 
 function init_vpp_agent {
