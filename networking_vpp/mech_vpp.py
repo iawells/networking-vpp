@@ -490,7 +490,7 @@ class EtcdAgentCommunicator(AgentCommunicator):
                     if self.do_etcd_update(k, v):
                         return True
                     else:
-                        os.sleep(1) # something went bad; breathe, in
+                        time.sleep(1) # something went bad; breathe, in
                                     # case we end up in a tight loop
                         return False
 
